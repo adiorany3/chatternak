@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farming Chat Bot</title>
+    <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>Farming Assistant</h1>
+            <p>Tanya seputar peternakan dan pertanian by Galuh Adi Insani</p>
+            <div class="feature-badges">
+                <span class="badge">AI</span>
+                <span class="badge python-badge">Python</span>
+                <button id="help-button" class="help-button">?</button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot-message">
+                <p>Selamat datang di Asisten Peternakan! Silakan tanyakan tentang peternakan, hewan ternak, teknik budidaya, atau topik pertanian lainnya.</p>
+                <p>Dengan Python, saya juga bisa membantu Anda:</p>
+                <ul>
+                    <li>Menghitung kebutuhan pakan berdasarkan jumlah ternak</li>
+                    <li>Memprediksikan pertumbuhan ternak</li>
+                    <li>Menganalisis titik impas (BEP) untuk usaha peternakan</li>
+                    <li>Menjawab lebih banyak pertanyaan dengan bantuan NLP</li>
+                </ul>
+                <p>Contoh: "Berapa kebutuhan pakan untuk 10 ekor sapi?" atau "Prediksi pertumbuhan ayam dari berat 1.5 kg dengan pertambahan 0.05 kg per hari selama 30 hari"</p>
+            </div>
+        </div>
+        <div class="chat-input">
+            <input type="text" id="user-input" placeholder="Ketik pesan Anda di sini...">
+            <button id="send-button">Kirim</button>
+        </div>
+    </div>
+    
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Bantuan Penggunaan</h2>
+            <h3>Contoh Pertanyaan Dasar:</h3>
+            <ul>
+                <li>"Apa saja jenis sapi yang populer di Indonesia?"</li>
+                <li>"Bagaimana cara merawat kambing?"</li>
+                <li>"Apa pakan yang baik untuk ayam?"</li>
+            </ul>
+            
+            <h3>Kemampuan Dengan Python:</h3>
+            <h4>1. Perhitungan Kebutuhan Pakan</h4>
+            <p>Format: "Hitung kebutuhan pakan untuk [jumlah] [jenis hewan] dengan berat [berat] kg"</p>
+            <p>Contoh: "Hitung kebutuhan pakan untuk 5 ekor kambing dengan berat 35 kg"</p>
+            
+            <h4>2. Prediksi Pertumbuhan</h4>
+            <p>Format: "Prediksi pertumbuhan [hewan] dari berat [berat awal] kg dengan pertambahan [PBBH] kg per hari selama [durasi] hari"</p>
+            <p>Contoh: "Prediksi pertumbuhan sapi dari berat 250 kg dengan pertambahan 0.8 kg per hari selama 90 hari"</p>
+            
+            <h4>3. Analisis Break Even Point (BEP)</h4>
+            <p>Format: "Hitung BEP dengan biaya tetap [biaya] juta harga jual [harga] ribu dan biaya variabel [biaya]"</p>
+            <p>Contoh: "Hitung BEP dengan biaya tetap 20 juta harga jual 50 ribu dan biaya variabel 30 ribu"</p>
+            
+            <h4>4. Tanggal dan Waktu</h4>
+            <p>Contoh: "Tanggal berapa sekarang?" atau "Jam berapa sekarang?"</p>
+        </div>
+    </div>
+    
+    <script src="src/chatbot.js"></script>
+    <script>
+        // Help modal functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.getElementById('help-modal');
+            const btn = document.getElementById('help-button');
+            const span = document.getElementsByClassName('close')[0];
+            
+            btn.onclick = function() {
+                modal.style.display = 'block';
+            }
+            
+            span.onclick = function() {
+                modal.style.display = 'none';
+            }
+            
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "farming-chatbot",
+  "version": "1.0.0",
+  "description": "A simple chat bot for farming and livestock information",
+  "main": "index.html",
+  "scripts": {
+    "start": "open index.html"
+  },
+  "keywords": [
+    "chatbot",
+    "farming",
+    "agriculture",
+    "livestock"
+  ],
+  "author": "",
+  "license": "MIT"
+}

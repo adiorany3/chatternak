@@ -19,9 +19,15 @@ try:
 except LookupError:
     nltk.download('wordnet', quiet=True)
 
+# If punkt tokenizer not found, download it
+try:
+    nltk.download('punkt', quiet=True)
+except:
+    pass
+
 # Page configuration
 st.set_page_config(
-    page_title="Chatternak - Farming Chat Bot",
+    page_title="Chat Ternak - Farming Chat Bot",
     page_icon="🐄",
     layout="centered",
     initial_sidebar_state="expanded"
@@ -583,4 +589,4 @@ elif tool_option == "Analisis BEP":
 
 # Footer
 st.markdown("---")
-st.markdown("© 2025 Chatternak - Farming Chat Bot | Created with Streamlit")
+st.markdown("© 2025 Chatternak - Farming Chat Bot | Created by Galuh Adi Insani")

@@ -411,13 +411,13 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 
 # Main UI elements
-st.title("🐄 Chatternak - Farming Chat Bot")
+st.title("🐄 Chat Ternak - Farming Chat Bot")
 st.markdown("Chatbot cerdas untuk informasi peternakan dan pertanian")
 
 # Sidebar with options
 with st.sidebar:
-    st.header("Tentang Chatternak")
-    st.info("Chatternak adalah chatbot interaktif yang dapat memberikan informasi tentang peternakan dan pertanian.")
+    st.header("Tentang Chat Ternak")
+    st.info("Chat Ternak adalah chatbot interaktif yang dapat memberikan informasi tentang peternakan dan pertanian.")
     
     st.header("Fitur")
     st.markdown("""

@@ -21,7 +21,7 @@ except LookupError:
 
 # If punkt tokenizer not found, download it
 try:
-    nltk.download('punkt', quiet=True)
+    nltk.download('all', quiet=True)
 except:
     pass
 

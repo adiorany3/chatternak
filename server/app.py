@@ -1,13 +1,30 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import re
+# Chat Ternak Server
+# Python FastAPI Server for Farm Chatbot
+# Author: Galuh Adi Insani
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import random
-import json
-import os
-import numpy as np
-from datetime import datetime
+import re
 import nltk
 from nltk.stem import WordNetLemmatizer
+from datetime import datetime
+import numpy as np
+
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import json
+import os
+from deepseek_integration import DeepSeekAPI
+from gemini_integration import GeminiAPI  # Import the new GeminiAPI class
+
+# Initialize AI API clients
+deepseek_client = DeepSeekAPI()
+gemini_client = GeminiAPI()  # Menghapus API key dari kode, akan menggunakan variabel lingkungan
+
+# Set the default AI provider (can be 'deepseek' or 'gemini')
+ai_provider = os.environ.get("AI_PROVIDER", "deepseek")
 
 # Download NLTK data (uncomment jika perlu)
 # nltk.download('punkt')
@@ -270,9 +287,62 @@ def calculate_bep(fixed_cost, price_per_unit, variable_cost_per_unit):
     except Exception as e:
         return f"Gagal menghitung BEP: {str(e)}"
 
-# Fungsi untuk memperoleh respons bot
+# Integrate DeepSeek and Gemini into the get_bot_response function
 def get_bot_response(message):
     message = message.lower()
+    
+    # Check if the message is asking to switch to Gemini API
+    if "gunakan pilihan api gemini" in message or "pakai gemini" in message or "gunakan gemini" in message:
+        global ai_provider
+        ai_provider = "gemini"
+        return "Berhasil beralih ke Gemini API untuk pertanyaan kompleks. Silakan ajukan pertanyaan Anda."
+    
+    # Check if the message is asking to switch to DeepSeek API
+    if "gunakan pilihan api deepseek" in message or "pakai deepseek" in message or "gunakan deepseek" in message:
+        global ai_provider
+        ai_provider = "deepseek"
+        return "Berhasil beralih ke DeepSeek API untuk pertanyaan kompleks. Silakan ajukan pertanyaan Anda."
+    
+    # Try AI API first for more advanced responses
+    try:
+        # Check if message is complex or requires detailed knowledge
+        complex_keywords = ["bagaimana", "jelaskan", "solusi", "strategi", "metode", "teknologi", "modern", 
+                           "terbaru", "penelitian", "studi", "inovasi"]
+        
+        if any(keyword in message.lower() for keyword in complex_keywords) or len(message.split()) > 6:
+            # Prepare a fallback response based on our local knowledge base
+            fallback_response = None
+            
+            # Generate fallback response from our farming_knowledge base
+            for topic in farming_knowledge:
+                if topic in message:
+                    fallback_response = farming_knowledge[topic]['info']
+                    break
+            
+            if not fallback_response:
+                fallback_response = random.choice(intents["fallback"]["responses"])
+            
+            # This question seems complex, use selected AI provider for better response
+            context = "Informasi tentang peternakan di Indonesia, termasuk jenis ternak, perawatan, pakan, dan praktik terbaik. Berikan informasi yang akurat dan bermanfaat untuk peternak Indonesia."
+            
+            if ai_provider == "gemini":
+                return gemini_client.generate_response(
+                    prompt=message,
+                    context=context,
+                    temperature=0.7,
+                    fallback_response=fallback_response
+                )
+            else:  # default to DeepSeek
+                return deepseek_client.generate_response(
+                    prompt=message,
+                    context=context,
+                    temperature=0.7,
+                    fallback_response=fallback_response
+                )
+    except Exception as e:
+        print(f"AI API error ({ai_provider}): {str(e)}")
+    
+    # If AI API failed or wasn't used, continue with rule-based bot response
     
     # Cek pola pertanyaan dengan Python processing
     # Cek greeting, thanks, bye

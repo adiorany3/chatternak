@@ -1,227 +1,176 @@
-// Farming Chat Bot Logic
+// Chat Ternak Frontend JavaScript
+// Author: Galuh Adi Insani
+
 document.addEventListener('DOMContentLoaded', () => {
     const chatMessages = document.getElementById('chat-messages');
     const userInput = document.getElementById('user-input');
     const sendButton = document.getElementById('send-button');
 
-    // Knowledge base for farming topics
-    const farmingKnowledge = {
-        // Ternak Sapi (Cattle)
-        'sapi': {
-            'info': 'Sapi adalah hewan ternak yang umum dibudidayakan untuk daging, susu, dan tenaga kerja. Di Indonesia, beberapa jenis sapi yang populer adalah sapi Bali, sapi Madura, dan sapi PO (Peranakan Ongole).',
-            'perawatan': 'Perawatan sapi meliputi pemberian pakan berkualitas (hijauan dan konsentrat), kandang yang bersih, vaksinasi rutin, dan pemeriksaan kesehatan.',
-            'pakan': 'Pakan sapi terdiri dari hijauan (rumput gajah, rumput raja) dan konsentrat (dedak, ampas tahu, bungkil kelapa). Sapi dewasa membutuhkan sekitar 10% dari berat badannya untuk pakan hijauan per hari.',
-            'reproduksi': 'Masa kebuntingan sapi sekitar 9 bulan. Deteksi birahi penting untuk keberhasilan perkawinan. Sapi dapat dikawinkan secara alami atau dengan Inseminasi Buatan (IB).',
-        },
-        
-        // Ternak Kambing (Goats)
-        'kambing': {
-            'info': 'Kambing adalah ternak yang mudah dipelihara dan memiliki nilai ekonomi tinggi. Jenis kambing di Indonesia antara lain kambing Kacang, kambing Etawa, dan kambing Jawarandu.',
-            'perawatan': 'Kambing membutuhkan kandang yang kering dan bersih, pakan yang cukup, dan perawatan kuku secara berkala. Kambing juga perlu divaksin terhadap penyakit seperti tetanus dan enterotoksemia.',
-            'pakan': 'Kambing adalah ruminansia yang memakan berbagai jenis daun-daunan, rumput, dan leguminosa. Pakan tambahan seperti ampas tahu dan dedak bisa diberikan untuk meningkatkan produktivitas.',
-            'reproduksi': 'Masa kebuntingan kambing sekitar 5 bulan. Kambing betina dapat melahirkan 1-3 anak per kelahiran dan dapat beranak hingga 2 kali dalam setahun dengan manajemen yang baik.',
-        },
-        
-        // Ternak Ayam (Chickens)
-        'ayam': {
-            'info': 'Peternakan ayam di Indonesia meliputi ayam pedaging (broiler), ayam petelur, dan ayam kampung. Ayam adalah ternak yang relatif mudah dibudidayakan dengan siklus produksi yang cepat.',
-            'perawatan': 'Perawatan ayam meliputi kandang yang bersih dan nyaman, vaksinasi rutin, biosecurity ketat, dan manajemen pakan yang baik.',
-            'pakan': 'Pakan ayam harus mengandung protein, energi, vitamin, dan mineral yang cukup. Ayam pedaging dan petelur membutuhkan formulasi pakan yang berbeda sesuai kebutuhan produksi.',
-            'penyakit': 'Penyakit umum pada ayam antara lain Avian Influenza (flu burung), Newcastle Disease (ND), Infectious Bursal Disease (Gumboro), dan Chronic Respiratory Disease (CRD).',
-        },
-        
-        // Ternak Bebek (Ducks)
-        'bebek': {
-            'info': 'Bebek (itik) populer dibudidayakan untuk daging dan telur. Jenis bebek yang umum di Indonesia adalah bebek Peking, bebek Alabio, dan itik Mojosari.',
-            'perawatan': 'Bebek membutuhkan kandang yang cukup luas dengan akses ke air untuk berenang (opsional namun dianjurkan). Pemberian pakan teratur dan vaksinasi rutin diperlukan.',
-            'pakan': 'Pakan bebek dapat berupa campuran dedak, bekatul, jagung giling, dan sumber protein seperti tepung ikan. Bebek juga menyukai sayuran hijau dan siput.',
-            'produksi': 'Bebek petelur dapat menghasilkan 250-300 telur per tahun dengan manajemen yang baik. Bebek pedaging dapat dipanen pada umur 8-10 minggu.',
-        },
-        
-        // Ternak Ikan (Fish)
-        'ikan': {
-            'info': 'Budidaya ikan air tawar populer di Indonesia, meliputi ikan lele, nila, gurame, mas, dan patin. Budidaya ikan dapat dilakukan di kolam tanah, terpal, atau sistem bioflok.',
-            'kolam': 'Kolam ikan harus memiliki sumber air yang cukup dan berkualitas baik. Kedalaman kolam yang ideal adalah 1-1,5 meter dengan sistem aerasi yang baik.',
-            'pakan': 'Pakan ikan bisa berupa pelet komersial atau pakan alami seperti cacing, dedak, dan ampas tahu. Pemberian pakan sebaiknya 2-3 kali sehari secara teratur.',
-            'penyakit': 'Penyakit umum pada ikan antara lain white spot (bintik putih), dropsy (perut bengkak), dan jamur. Pencegahan melalui kualitas air yang baik dan tidak overstocking sangat penting.',
-        },
-        
-        // Pupuk Organik (Organic Fertilizer)
-        'pupuk': {
-            'info': 'Kotoran ternak dapat diolah menjadi pupuk organik yang berkualitas untuk pertanian. Pupuk organik memperbaiki struktur tanah dan menambah nutrisi.',
-            'kompos': 'Pengomposan adalah proses mengubah bahan organik menjadi pupuk dengan bantuan mikroorganisme. Bahan yang bisa dikomposkan meliputi kotoran ternak, sisa pakan, dan material organik lainnya.',
-            'biogas': 'Kotoran ternak dapat diproses dalam digester biogas untuk menghasilkan gas metana sebagai energi alternatif dan sludge sebagai pupuk organik berkualitas.',
-            'aplikasi': 'Pupuk organik sebaiknya diaplikasikan 2-3 minggu sebelum tanam dengan dosis 5-10 ton/hektar untuk hasil optimal.',
-        }
-    };
-
-    // API URL for Python backend
-    const API_URL = 'http://localhost:5000';
-
-    // Function to add message to chat
-    function addMessage(message, isUser = false) {
-        const messageDiv = document.createElement('div');
-        messageDiv.classList.add('message');
-        messageDiv.classList.add(isUser ? 'user-message' : 'bot-message');
-        
-        const messagePara = document.createElement('p');
-        messagePara.textContent = message;
-        
-        messageDiv.appendChild(messagePara);
-        chatMessages.appendChild(messageDiv);
-        
-        // Auto scroll to the bottom
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    // Function to get bot response from Python backend
-    async function getBotResponseFromPython(userMessage) {
-        try {
-            const response = await fetch(`${API_URL}/api/chat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ message: userMessage }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-
-            const data = await response.json();
-            return data.response;
-        } catch (error) {
-            console.error('Error fetching response from Python backend:', error);
-            // Fallback to JavaScript logic if Python server is not available
-            return getBotResponseFromJS(userMessage);
-        }
-    }
-
-    // Original JavaScript response function (as fallback)
-    function getBotResponseFromJS(userMessage) {
-        userMessage = userMessage.toLowerCase();
-        
-        // Check for greetings
-        if (userMessage.includes('halo') || userMessage.includes('hai') || userMessage.includes('hello')) {
-            return 'Halo! Ada yang bisa saya bantu tentang peternakan?';
-        }
-        
-        // Check for thanks
-        if (userMessage.includes('terima kasih') || userMessage.includes('makasih')) {
-            return 'Sama-sama! Ada pertanyaan lain tentang peternakan?';
-        }
-        
-        // Check for specific farm animals or topics
-        for (const topic in farmingKnowledge) {
-            if (userMessage.includes(topic)) {
-                // Check for specific aspects about the topic
-                if (userMessage.includes('info') || userMessage.includes('tentang')) {
-                    return farmingKnowledge[topic].info;
-                } else if (userMessage.includes('perawatan') || userMessage.includes('merawat')) {
-                    return farmingKnowledge[topic].perawatan || 'Maaf, informasi spesifik tentang perawatan ' + topic + ' belum tersedia.';
-                } else if (userMessage.includes('pakan') || userMessage.includes('makan')) {
-                    return farmingKnowledge[topic].pakan || 'Maaf, informasi tentang pakan ' + topic + ' belum tersedia.';
-                } else if (userMessage.includes('reproduksi') || userMessage.includes('beranak') || userMessage.includes('kawin')) {
-                    return farmingKnowledge[topic].reproduksi || 'Maaf, informasi tentang reproduksi ' + topic + ' belum tersedia.';
-                } else if (userMessage.includes('penyakit') || userMessage.includes('sakit')) {
-                    return farmingKnowledge[topic].penyakit || 'Maaf, informasi tentang penyakit ' + topic + ' belum tersedia.';
-                } else if (userMessage.includes('produksi') || userMessage.includes('hasil')) {
-                    return farmingKnowledge[topic].produksi || 'Maaf, informasi tentang produksi ' + topic + ' belum tersedia.';
-                } else {
-                    // Return general info if no specific aspect mentioned
-                    return farmingKnowledge[topic].info;
-                }
-            }
-        }
-        
-        // General questions about farming
-        if (userMessage.includes('pupuk organik') || userMessage.includes('kompos')) {
-            return farmingKnowledge.pupuk.kompos;
-        } else if (userMessage.includes('biogas')) {
-            return farmingKnowledge.pupuk.biogas;
-        } else if (userMessage.includes('mulai beternak') || userMessage.includes('memulai peternakan')) {
-            return 'Untuk memulai beternak, Anda perlu mempertimbangkan: 1) Jenis ternak yang sesuai dengan kondisi lingkungan dan pasar, 2) Modal yang tersedia, 3) Ketersediaan pakan, 4) Pengetahuan tentang manajemen ternak, dan 5) Perizinan yang diperlukan. Ternak pemula yang disarankan adalah ayam, kambing, atau ikan lele.';
-        } else if (userMessage.includes('modal') || userMessage.includes('biaya')) {
-            return 'Modal untuk memulai peternakan bervariasi tergantung jenis dan skala. Untuk skala kecil: Ayam petelur (50-100 ekor) sekitar Rp 5-10 juta, Kambing (5-10 ekor) sekitar Rp 10-20 juta, Ikan lele (1 kolam) sekitar Rp 3-5 juta. Modal tersebut mencakup bibit, kandang/kolam, dan pakan awal.';
-        }
-        
-        // Default response if no matching answer found
-        return 'Maaf, saya belum memiliki informasi spesifik tentang pertanyaan tersebut. Silakan tanyakan tentang peternakan sapi, kambing, ayam, bebek, ikan, atau pupuk organik.';
-    }
-
-    // Send message on button click
+    // Add event listeners
     sendButton.addEventListener('click', sendMessage);
-    
-    // Send message on enter key
     userInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             sendMessage();
         }
     });
 
-    async function sendMessage() {
+    // Add help button functionality
+    const helpButton = document.getElementById('help-button');
+    if (helpButton) {
+        helpButton.addEventListener('click', showHelp);
+    }
+
+    // Function to send messages
+    function sendMessage() {
         const message = userInput.value.trim();
+        if (message === '') return;
+
+        // Add user message to chat
+        addMessageToChat('user', message);
         
-        if (message !== '') {
-            // Add user message to chat
-            addMessage(message, true);
+        // Clear input
+        userInput.value = '';
+
+        // Show typing indicator
+        addTypingIndicator();
+
+        // Send to backend - either local API or DeepSeek API based on question complexity
+        fetch('http://localhost:5000/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ message: message })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Remove typing indicator
+            removeTypingIndicator();
             
-            // Clear input field
-            userInput.value = '';
+            // Add bot response to chat
+            addMessageToChat('bot', data.response);
             
-            // Show loading indicator
-            const loadingDiv = document.createElement('div');
-            loadingDiv.classList.add('message', 'bot-message', 'loading');
-            loadingDiv.textContent = 'Memproses...';
-            chatMessages.appendChild(loadingDiv);
+            // Scroll to bottom
             chatMessages.scrollTop = chatMessages.scrollHeight;
-            
-            try {
-                // Get bot response from Python backend
-                const botResponse = await getBotResponseFromPython(message);
-                
-                // Remove loading indicator
-                chatMessages.removeChild(loadingDiv);
-                
-                // Add bot response
-                addMessage(botResponse);
-            } catch (error) {
-                // Remove loading indicator
-                chatMessages.removeChild(loadingDiv);
-                
-                // Add error message
-                addMessage('Maaf, terjadi kesalahan dalam memproses pesan Anda. Silakan coba lagi.');
-                console.error(error);
-            }
-        }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            removeTypingIndicator();
+            addMessageToChat('bot', 'Maaf, terjadi kesalahan saat berkomunikasi dengan server. Silakan coba lagi.');
+        });
     }
 
-    // Function to analyze data
-    async function analyzeData(dataType, values) {
-        try {
-            const response = await fetch(`${API_URL}/api/analyze`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ type: dataType, values: values }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-
-            const data = await response.json();
-            return data.result;
-        } catch (error) {
-            console.error('Error analyzing data:', error);
-            return 'Maaf, terjadi kesalahan dalam menganalisis data.';
+    // Function to add message to chat
+    function addMessageToChat(sender, message) {
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('message');
+        messageElement.classList.add(sender + '-message');
+        
+        // Process message for links and formatting
+        const formattedMessage = formatMessage(message);
+        
+        messageElement.innerHTML = formattedMessage;
+        chatMessages.appendChild(messageElement);
+        
+        // Scroll to bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Add typing indicator
+    function addTypingIndicator() {
+        const typingElement = document.createElement('div');
+        typingElement.classList.add('message', 'bot-message', 'typing-indicator');
+        typingElement.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+        typingElement.id = 'typing-indicator';
+        chatMessages.appendChild(typingElement);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Remove typing indicator
+    function removeTypingIndicator() {
+        const typingElement = document.getElementById('typing-indicator');
+        if (typingElement) {
+            typingElement.remove();
         }
     }
-
-    // Add to global scope for potential use in console or other parts
-    window.farmingChatbot = {
-        analyzeData
-    };
+    
+    // Format message to handle links and formatting
+    function formatMessage(message) {
+        // Convert URLs to links
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        message = message.replace(urlRegex, url => `<a href="${url}" target="_blank">${url}</a>`);
+        
+        // Convert newlines to <br>
+        message = message.replace(/\n/g, '<br>');
+        
+        // Handle bullet points
+        message = message.replace(/- (.*)/g, '<li>$1</li>');
+        if (message.includes('<li>')) {
+            message = `<ul>${message}</ul>`;
+        }
+        
+        return `<p>${message}</p>`;
+    }
 });
+
+// Add enhanced help functionality
+function showHelp() {
+    const helpContent = `
+        <div class="help-content">
+            <h2>Bantuan Penggunaan Chat Ternak</h2>
+            
+            <h3>🔍 Cara Menggunakan Chatbot:</h3>
+            <p>Ketik pertanyaan Anda tentang peternakan dan pertanian di kotak chat, lalu tekan Enter atau klik tombol Kirim.</p>
+            
+            <h3>🐄 Topik yang Didukung:</h3>
+            <ul>
+                <li><strong>Informasi Ternak:</strong> Sapi, kambing, ayam, bebek, ikan, kelinci</li>
+                <li><strong>Aspek Peternakan:</strong> Jenis, perawatan, pakan, reproduksi, penyakit, produksi</li>
+                <li><strong>Pupuk Organik:</strong> Informasi tentang pengolahan kotoran ternak menjadi pupuk</li>
+            </ul>
+            
+            <h3>📊 Fitur Analisis Data:</h3>
+            <ul>
+                <li><strong>Prediksi Pertumbuhan:</strong> Contoh: "Prediksi pertumbuhan sapi dari berat 250 kg dengan pertambahan 0.8 kg per hari selama 90 hari"</li>
+                <li><strong>Perhitungan Kebutuhan Pakan:</strong> Contoh: "Hitung kebutuhan pakan untuk 5 ekor kambing dengan berat 35 kg"</li>
+                <li><strong>Analisis BEP:</strong> Contoh: "Hitung BEP dengan biaya tetap 20 juta harga jual 50 ribu dan biaya variabel 30 ribu"</li>
+            </ul>
+            
+            <h3>💡 Contoh Pertanyaan:</h3>
+            <ul>
+                <li>"Apa saja jenis sapi yang populer di Indonesia?"</li>
+                <li>"Bagaimana cara merawat kambing?"</li>
+                <li>"Berapa kebutuhan pakan untuk 10 ekor ayam?"</li>
+                <li>"Jelaskan tentang reproduksi pada kelinci"</li>
+                <li>"Bagaimana cara membuat pupuk dari kotoran ternak?"</li>
+                <li>"Prediksi pertumbuhan ikan dengan berat 0.5 kg dengan pertambahan 0.05 kg per hari selama 30 hari"</li>
+            </ul>
+            
+            <h3>🔄 Mode DeepSeek AI:</h3>
+            <p>Untuk pertanyaan kompleks, Chat Ternak akan secara otomatis menggunakan AI canggih dari DeepSeek untuk memberikan jawaban yang lebih lengkap dan terperinci.</p>
+            
+            <div class="help-footer">
+                <button id="close-help-btn" class="close-help-button">Tutup</button>
+            </div>
+        </div>
+    `;
+    
+    // Create modal overlay
+    const helpModal = document.createElement('div');
+    helpModal.classList.add('help-modal');
+    helpModal.innerHTML = helpContent;
+    document.body.appendChild(helpModal);
+    
+    // Show with animation
+    setTimeout(() => {
+        helpModal.classList.add('active');
+    }, 10);
+    
+    // Add event listener to close button
+    document.getElementById('close-help-btn').addEventListener('click', () => {
+        helpModal.classList.remove('active');
+        setTimeout(() => {
+            helpModal.remove();
+        }, 300);
+    });
+}

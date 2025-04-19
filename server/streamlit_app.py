@@ -7,6 +7,10 @@ import numpy as np
 from datetime import datetime
 import nltk
 from nltk.stem import WordNetLemmatizer
+from deepseek_integration import DeepSeekAPI
+
+# Initialize DeepSeek API client
+deepseek_client = DeepSeekAPI()
 
 # Download NLTK data - ensuring the required packages are available
 try:
@@ -40,7 +44,7 @@ lemmatizer = WordNetLemmatizer()
 farming_knowledge = {
     # Ternak Sapi (Cattle)
     'sapi': {
-        'info': 'Sapi adalah hewan ternak yang umum dibudidayakan untuk daging, susu, dan tenaga kerja. Di Indonesia, beberapa jenis sapi yang populer adalah sapi Bali, sapi Madura, dan sapi PO (Peranakan Ongole).',
+        'info': 'Sapi adalah hewan ternak yang umum dibudidayakan untuk daging, susu, dan tenaga kerja. Di Indonesia, beberapa jenis sapi yang populer adalah sapi Bali, sapi Madura, dan sapi PO (Peranakan Ongole). Sapi memiliki kaki 4, tubuh besar, dan memiliki sistem pencernaan ruminansia.',
         'perawatan': 'Perawatan sapi meliputi pemberian pakan berkualitas (hijauan dan konsentrat), kandang yang bersih, vaksinasi rutin, dan pemeriksaan kesehatan.',
         'pakan': 'Pakan sapi terdiri dari hijauan (rumput gajah, rumput raja) dan konsentrat (dedak, ampas tahu, bungkil kelapa). Sapi dewasa membutuhkan sekitar 10% dari berat badannya untuk pakan hijauan per hari.',
         'reproduksi': 'Masa kebuntingan sapi sekitar 9 bulan. Deteksi birahi penting untuk keberhasilan perkawinan. Sapi dapat dikawinkan secara alami atau dengan Inseminasi Buatan (IB).',
@@ -49,7 +53,7 @@ farming_knowledge = {
     
     # Ternak Kambing (Goats)
     'kambing': {
-        'info': 'Kambing adalah ternak yang mudah dipelihara dan memiliki nilai ekonomi tinggi. Jenis kambing di Indonesia antara lain kambing Kacang, kambing Etawa, dan kambing Jawarandu.',
+        'info': 'Kambing adalah ternak yang mudah dipelihara dan memiliki nilai ekonomi tinggi. Jenis kambing di Indonesia antara lain kambing Kacang, kambing Etawa, dan kambing Jawarandu. Kambing dapat dibudidayakan untuk daging, susu, dan kulit.',
         'perawatan': 'Kambing membutuhkan kandang yang kering dan bersih, pakan yang cukup, dan perawatan kuku secara berkala. Kambing juga perlu divaksin terhadap penyakit seperti tetanus dan enterotoksemia.',
         'pakan': 'Kambing adalah ruminansia yang memakan berbagai jenis daun-daunan, rumput, dan leguminosa. Pakan tambahan seperti ampas tahu dan dedak bisa diberikan untuk meningkatkan produktivitas.',
         'reproduksi': 'Masa kebuntingan kambing sekitar 5 bulan. Kambing betina dapat melahirkan 1-3 anak per kelahiran dan dapat beranak hingga 2 kali dalam setahun dengan manajemen yang baik.',
@@ -290,6 +294,29 @@ def calculate_bep(fixed_cost, price_per_unit, variable_cost_per_unit):
 # Fungsi untuk memperoleh respons bot
 def get_bot_response(message):
     message = message.lower()
+    
+    # Try DeepSeek API first for more advanced responses
+    try:
+        # Check if message is complex or requires detailed knowledge
+        complex_keywords = ["bagaimana", "jelaskan", "solusi", "strategi", "metode", "teknologi", "modern", 
+                            "terbaru", "penelitian", "studi", "inovasi"]
+        
+        if any(keyword in message.lower() for keyword in complex_keywords) or len(message.split()) > 6:
+            # This question seems complex, use DeepSeek for better response
+            with st.spinner('Mencari informasi terkini...'):
+                deepseek_response = deepseek_client.generate_response(
+                    prompt=message,
+                    context="Informasi tentang peternakan di Indonesia, termasuk jenis ternak, perawatan, pakan, dan praktik terbaik. Berikan informasi yang akurat dan bermanfaat untuk peternak Indonesia.",
+                    temperature=0.7
+                )
+                
+                if deepseek_response and not deepseek_response.startswith("Error:"):
+                    return deepseek_response
+            # If DeepSeek fails, fall back to rule-based responses
+    except Exception as e:
+        print(f"DeepSeek error: {str(e)}")
+    
+    # If DeepSeek failed or wasn't used, continue with rule-based bot response
     
     # Cek pola pertanyaan dengan Python processing
     # Cek greeting, thanks, bye
@@ -589,4 +616,4 @@ elif tool_option == "Analisis BEP":
 
 # Footer
 st.markdown("---")
-st.markdown("© 2025 Chatternak - Farming Chat Bot | Created by Galuh Adi Insani")
+st.markdown("© 2025 Chat Ternak (Beta Version) - Farming Chat Bot | Created by Galuh Adi Insani")

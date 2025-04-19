@@ -381,9 +381,9 @@ def get_bot_response(message):
                 return farming_knowledge[topic].get('reproduksi', 'Maaf, informasi tentang reproduksi ' + topic + ' belum tersedia.')
             elif 'penyakit' in message or 'sakit' in message or 'virus' in message or 'bakteri' in message:
                 return farming_knowledge[topic].get('penyakit', 'Maaf, informasi tentang penyakit ' + topic + ' belum tersedia.')
-            elif 'produksi' in message or 'hasil' in message atau 'produktivitas' in message:
+            elif 'produksi' in message or 'hasil' in message or 'produktivitas' in message:
                 return farming_knowledge[topic].get('produksi', 'Maaf, informasi tentang produksi ' + topic + ' belum tersedia.')
-            elif 'kolam' in message atau 'kandang' in message atau 'habitat' in message:
+            elif 'kolam' in message or 'kandang' in message or 'habitat' in message:
                 return farming_knowledge[topic].get('kolam', farming_knowledge[topic].get('kandang', 'Maaf, informasi tentang kandang/kolam ' + topic + ' belum tersedia.'))
             else:
                 # Return general info if no specific aspect mentioned

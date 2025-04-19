@@ -40,6 +40,26 @@ st.set_page_config(
 # Inisialisasi lemmatizer
 lemmatizer = WordNetLemmatizer()
 
+# Feed rates for different animal types (move this to global scope)
+feed_rates = {
+    'sapi': 0.03,  # 3% dari berat badan
+    'kambing': 0.04,  # 4% dari berat badan
+    'ayam': 0.1,  # 10% dari berat badan
+    'bebek': 0.08,  # 8% dari berat badan
+    'ikan': 0.05,  # 5% dari berat badan
+    'kelinci': 0.07  # 7% dari berat badan
+}
+
+# Default weights for different animal types (move this to global scope)
+default_weights = {
+    'sapi': 400,  # kg
+    'kambing': 40,  # kg
+    'ayam': 2,  # kg
+    'bebek': 3,  # kg
+    'ikan': 0.5,  # kg
+    'kelinci': 4  # kg
+}
+
 # Basis pengetahuan peternakan
 farming_knowledge = {
     # Ternak Sapi (Cattle)
@@ -230,23 +250,8 @@ def predict_growth(initial_weight, daily_gain, days):
 # Fungsi untuk hitung kebutuhan pakan
 def calculate_feed_needs(animal_type, count, avg_weight=None):
     """Hitung kebutuhan pakan berdasarkan jenis dan jumlah ternak"""
-    feed_rates = {
-        'sapi': 0.03,  # 3% dari berat badan
-        'kambing': 0.04,  # 4% dari berat badan
-        'ayam': 0.1,  # 10% dari berat badan
-        'bebek': 0.08,  # 8% dari berat badan
-        'ikan': 0.05,  # 5% dari berat badan
-        'kelinci': 0.07  # 7% dari berat badan
-    }
-    
-    default_weights = {
-        'sapi': 400,  # kg
-        'kambing': 40,  # kg
-        'ayam': 2,  # kg
-        'bebek': 3,  # kg
-        'ikan': 0.5,  # kg
-        'kelinci': 4  # kg
-    }
+    # Use the global feed_rates and default_weights dictionaries
+    global feed_rates, default_weights
     
     try:
         animal_type = animal_type.lower()
@@ -376,9 +381,9 @@ def get_bot_response(message):
                 return farming_knowledge[topic].get('reproduksi', 'Maaf, informasi tentang reproduksi ' + topic + ' belum tersedia.')
             elif 'penyakit' in message or 'sakit' in message or 'virus' in message or 'bakteri' in message:
                 return farming_knowledge[topic].get('penyakit', 'Maaf, informasi tentang penyakit ' + topic + ' belum tersedia.')
-            elif 'produksi' in message or 'hasil' in message or 'produktivitas' in message:
+            elif 'produksi' in message or 'hasil' in message atau 'produktivitas' in message:
                 return farming_knowledge[topic].get('produksi', 'Maaf, informasi tentang produksi ' + topic + ' belum tersedia.')
-            elif 'kolam' in message or 'kandang' in message or 'habitat' in message:
+            elif 'kolam' in message atau 'kandang' in message atau 'habitat' in message:
                 return farming_knowledge[topic].get('kolam', farming_knowledge[topic].get('kandang', 'Maaf, informasi tentang kandang/kolam ' + topic + ' belum tersedia.'))
             else:
                 # Return general info if no specific aspect mentioned
@@ -501,11 +506,10 @@ elif tool_option == "Kalkulator Pakan":
         count = st.number_input("Jumlah Ternak (ekor)", min_value=1, value=10)
     
     with col2:
-        default_weight = {"sapi": 400, "kambing": 40, "ayam": 2, "bebek": 3, "ikan": 0.5, "kelinci": 4}
         weight = st.number_input(
             "Berat Rata-rata (kg)", 
             min_value=0.1, 
-            value=float(default_weight.get(animal_type, 1.0)),
+            value=float(default_weights.get(animal_type, 1.0)),
             step=0.1
         )
     

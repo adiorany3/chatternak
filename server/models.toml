@@ -1,0 +1,519 @@
+# Daftar model SlashAI/OpenAI-compatible dan estimasi harga per 1 juta token.
+# Harga diisi dari daftar yang diberikan pengguna; ubah jika provider memperbarui harga.
+
+[[models]]
+id = "bai/claude-haiku-4.5"
+provider = "bai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "bai/claude-opus-4.7"
+provider = "bai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "bai/claude-sonnet-4.5"
+provider = "bai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "bai/deepseek-v4-flash"
+provider = "bai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "bai/deepseek-v4-pro"
+provider = "bai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "bai/glm-5"
+provider = "bai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "cmc/MiniMaxAI/MiniMax-M2.5"
+provider = "cmc"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "cx/gpt-5.2"
+provider = "cx"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "cx/gpt-5.4"
+provider = "cx"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "cx/gpt-5.5"
+provider = "cx"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "mimo/mimo-v2-omni"
+provider = "mimo"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "mimo/mimo-v2.5"
+provider = "mimo"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "mimo/mimo-v2.5-pro"
+provider = "mimo"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/GLM-5"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/GLM-5.1"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/Kimi-K2.5"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/Kimi-K2.6"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/MiniMax-M2.5"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/MiniMax-M2.7"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/Qwen3.6-Max-Preview"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/Qwen3.6-Plus"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/Step-3.5-Flash"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/claude-haiku-4.5"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/claude-opus-4.5"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/claude-opus-4.6"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/claude-opus-4.7"
+provider = "slashai"
+input_per_1m_rp = 250000
+output_per_1m_rp = 1250000
+
+[[models]]
+id = "slashai/claude-sonnet-4.5"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/claude-sonnet-4.6"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/claude-sonnet-4.7"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 15000
+
+[[models]]
+id = "slashai/deepseek-3.2"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/deepseek-v3.2"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/deepseek-v4-flash"
+provider = "slashai"
+input_per_1m_rp = 1500
+output_per_1m_rp = 6000
+
+[[models]]
+id = "slashai/deepseek-v4-pro"
+provider = "slashai"
+input_per_1m_rp = 4000
+output_per_1m_rp = 18000
+
+[[models]]
+id = "slashai/gemini-3-flash"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gemini-3.1-pro"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/glm-5"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/glm-5.1"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/gpt-5-codex"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5-codex-mini"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5-codex-mini-review"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5-codex-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5-mini"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5-nano"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.1"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.1-codex"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.1-codex-max"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.1-codex-max-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.1-codex-mini"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.1-codex-mini-high"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.1-codex-mini-high-review"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.1-codex-mini-review"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.1-codex-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.1-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.2"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.2-codex"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.2-codex-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.2-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.3-codex"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.3-codex-high"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.3-codex-high-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.3-codex-low"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.3-codex-low-review"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.3-codex-none"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.3-codex-none-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.3-codex-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.3-codex-spark"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.3-codex-spark-review"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.3-codex-xhigh"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.3-codex-xhigh-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.4"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.4-mini"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.4-nano"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.4-pro"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.4-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.5"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/gpt-5.5-instant"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/gpt-5.5-review"
+provider = "slashai"
+input_per_1m_rp = 5000
+output_per_1m_rp = 25000
+
+[[models]]
+id = "slashai/kimi-k2.5"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/mimo-v2-flash"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/mimo-v2-omni"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/mimo-v2-pro"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/mimo-v2.5"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/mimo-v2.5-pro"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+
+[[models]]
+id = "slashai/minimax-m2.5"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/minimax-m2.7"
+provider = "slashai"
+input_per_1m_rp = 50
+output_per_1m_rp = 200
+
+[[models]]
+id = "slashai/qwen3-coder-next"
+provider = "slashai"
+input_per_1m_rp = 500
+output_per_1m_rp = 2000
+

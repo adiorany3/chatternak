@@ -16,7 +16,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "enabled": True,
         "api_key": "",
         "chat_completions_url": "https://api.slashai.my.id/v1/chat/completions",
-        "model": "gpt-4o-mini",
+        "model": "slashai/gpt-5-mini",
         "temperature": 0.7,
         "max_tokens": 1000,
         "timeout": 60,
@@ -68,7 +68,13 @@ class OpenAIChatAPI:
     def is_configured(self) -> bool:
         return self.enabled and self.api_key not in PLACEHOLDER_KEYS and bool(self.chat_completions_url) and bool(self.model)
 
-    def generate_response(self, prompt: str, context: Optional[str] = None, temperature: Optional[float] = None) -> str:
+    def generate_response(
+        self,
+        prompt: str,
+        context: Optional[str] = None,
+        temperature: Optional[float] = None,
+        model: Optional[str] = None,
+    ) -> str:
         if not self.enabled:
             return "Error: Integrasi OpenAI-compatible API sedang dinonaktifkan di config.toml."
         if self.api_key in PLACEHOLDER_KEYS:
@@ -80,7 +86,7 @@ class OpenAIChatAPI:
         messages.append({"role": "user", "content": prompt})
 
         payload = {
-            "model": self.model,
+            "model": model or self.model,
             "messages": messages,
             "temperature": self.temperature if temperature is None else float(temperature),
             "max_tokens": self.max_tokens,

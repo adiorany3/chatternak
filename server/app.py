@@ -8,9 +8,11 @@ from datetime import datetime
 import nltk
 from nltk.stem import WordNetLemmatizer
 from openai_integration import OpenAIChatAPI
+from model_catalog import load_model_catalog, format_model_option, format_rupiah
 
-# Initialize OpenAI-compatible API client from config.toml
+# Initialize OpenAI-compatible API client and model catalog
 openai_client = OpenAIChatAPI()
+model_catalog = load_model_catalog()
 
 # Download NLTK data - ensuring the required packages are available
 try:
@@ -298,6 +300,7 @@ def calculate_bep(fixed_cost, price_per_unit, variable_cost_per_unit):
 
 # Fungsi untuk memperoleh respons bot
 def get_bot_response(message):
+    original_message = message
     message = message.lower()
     
     # Try OpenAI-compatible API first for more advanced responses
@@ -310,9 +313,10 @@ def get_bot_response(message):
             # This question seems complex, use OpenAI-compatible endpoint for better response
             with st.spinner('Mencari jawaban dengan OpenAI API...'):
                 openai_response = openai_client.generate_response(
-                    prompt=message,
+                    prompt=original_message,
                     context="Informasi tentang peternakan di Indonesia, termasuk jenis ternak, perawatan, pakan, dan praktik terbaik. Berikan informasi yang akurat, ringkas, dan bermanfaat untuk peternak Indonesia.",
-                    temperature=0.7
+                    temperature=st.session_state.get("selected_temperature", openai_client.temperature),
+                    model=st.session_state.get("selected_ai_model", openai_client.model),
                 )
                 
                 if openai_response and not openai_response.startswith("Error:"):
@@ -457,8 +461,32 @@ with st.sidebar:
     else:
         st.warning("API belum aktif. Isi API key di config.toml")
     st.caption(f"Endpoint: {openai_client.chat_completions_url}")
-    st.caption(f"Model: {openai_client.model}")
-    
+
+    model_ids = [model["id"] for model in model_catalog]
+    default_model = openai_client.model if openai_client.model in model_ids else model_catalog[0]["id"]
+    selected_model_id = st.selectbox(
+        "Model AI",
+        options=model_ids,
+        index=model_ids.index(default_model),
+        format_func=lambda model_id: format_model_option(next(model for model in model_catalog if model["id"] == model_id)),
+        help="Daftar model dan harga dibaca dari models.toml.",
+    )
+    st.session_state.selected_ai_model = selected_model_id
+
+    selected_model_info = next(model for model in model_catalog if model["id"] == selected_model_id)
+    st.caption(
+        f"Biaya: input {format_rupiah(selected_model_info['input_per_1m_rp'])}/1M token, "
+        f"output {format_rupiah(selected_model_info['output_per_1m_rp'])}/1M token"
+    )
+    st.session_state.selected_temperature = st.slider(
+        "Temperature",
+        min_value=0.0,
+        max_value=1.5,
+        value=float(openai_client.temperature),
+        step=0.1,
+        help="Nilai kecil lebih konsisten, nilai besar lebih kreatif.",
+    )
+
     st.header("Fitur")
     st.markdown("""
     - Informasi tentang hewan ternak:

@@ -138,3 +138,13 @@ api_key = "TOKEN_ANDA"
 5. Klik tombol **Tes koneksi API** di sidebar untuk melihat error asli dari API.
 
 Jika berhasil, sidebar akan menampilkan **OpenAI-compatible API aktif** dan sumber API key menjadi **Streamlit Secrets** atau **Environment variable**.
+
+## Perbaikan error `Extra data: line 2 column 1`
+
+Versi ini sudah memakai parser respons API yang lebih fleksibel. Aplikasi dapat membaca:
+
+- JSON standar OpenAI-compatible.
+- Streaming/SSE dengan format `data: {...}`.
+- NDJSON atau beberapa objek JSON yang dikirim berurutan.
+
+Error tersebut biasanya muncul saat endpoint mengembalikan beberapa objek JSON dalam satu respons, sedangkan parser lama hanya menerima satu JSON utuh.

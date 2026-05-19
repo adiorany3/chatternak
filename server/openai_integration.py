@@ -4,6 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Optional
 import os
+import json
 import requests
 
 try:
@@ -234,8 +235,7 @@ class OpenAIChatAPI:
                 timeout=self.timeout,
             )
             response.raise_for_status()
-            data = response.json()
-            return self._extract_text(data)
+            return self._extract_response_text(response.text)
         except requests.exceptions.HTTPError as error:
             detail = error.response.text[:500] if error.response is not None else str(error)
             status = error.response.status_code if error.response is not None else "unknown"
@@ -245,20 +245,173 @@ class OpenAIChatAPI:
         except Exception as error:
             return f"Error: Gagal membaca respons API - {error}"
 
+    @classmethod
+    def _extract_response_text(cls, raw_text: str) -> str:
+        """Ambil teks jawaban dari beberapa format respons OpenAI-compatible.
+
+        Sebagian gateway mengembalikan JSON standar, sementara gateway lain dapat
+        mengembalikan Server-Sent Events/streaming seperti `data: {...}` atau
+        beberapa JSON dipisah baris. Parser ini sengaja fleksibel agar tombol
+        Tes koneksi dan chat tetap berjalan pada format tersebut.
+        """
+        text = (raw_text or "").strip()
+        if not text:
+            raise ValueError("respons API kosong")
+
+        # Format JSON standar: {"choices": [{"message": {"content": "..."}}]}
+        try:
+            data = json.loads(text)
+            return cls._extract_text(data)
+        except json.JSONDecodeError:
+            pass
+
+        # Format Server-Sent Events / streaming:
+        # data: {"choices": [{"delta": {"content": "..."}}]}
+        # data: [DONE]
+        sse_payloads = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith(":"):
+                continue
+            if stripped.startswith("data:"):
+                payload = stripped[5:].strip()
+                if payload and payload != "[DONE]":
+                    sse_payloads.append(payload)
+        if sse_payloads:
+            assembled = cls._extract_from_json_fragments(sse_payloads)
+            if assembled:
+                return assembled
+
+        # Format NDJSON: satu objek JSON per baris tanpa prefix data:.
+        line_payloads = [line.strip() for line in text.splitlines() if line.strip()]
+        if len(line_payloads) > 1:
+            assembled = cls._extract_from_json_fragments(line_payloads)
+            if assembled:
+                return assembled
+
+        # Format beberapa objek JSON ditempel berurutan. Ini yang sering memicu
+        # error "Extra data: line 2 column 1" pada response.json().
+        decoder = json.JSONDecoder()
+        idx = 0
+        fragments = []
+        while idx < len(text):
+            while idx < len(text) and text[idx].isspace():
+                idx += 1
+            if idx >= len(text):
+                break
+            try:
+                obj, idx = decoder.raw_decode(text, idx)
+                fragments.append(json.dumps(obj, ensure_ascii=False))
+            except json.JSONDecodeError:
+                break
+        if fragments:
+            assembled = cls._extract_from_json_fragments(fragments)
+            if assembled:
+                return assembled
+
+        preview = text[:300].replace("\n", " ")
+        raise ValueError(f"format respons API tidak dikenali. Awal respons: {preview}")
+
+    @classmethod
+    def _extract_from_json_fragments(cls, fragments: list[str]) -> str:
+        parts: list[str] = []
+        last_full_text = ""
+
+        for fragment in fragments:
+            try:
+                data = json.loads(fragment)
+            except json.JSONDecodeError:
+                continue
+
+            chunk_text = cls._extract_delta_text(data)
+            if chunk_text:
+                parts.append(chunk_text)
+                continue
+
+            try:
+                full_text = cls._extract_text(data)
+                if full_text:
+                    last_full_text = full_text
+            except Exception:
+                continue
+
+        joined = "".join(parts).strip()
+        return joined or last_full_text.strip()
+
     @staticmethod
-    def _extract_text(data: Dict[str, Any]) -> str:
-        choices = data.get("choices", [])
+    def _extract_content_value(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            collected: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    collected.append(item)
+                elif isinstance(item, dict):
+                    value = item.get("text") or item.get("content")
+                    if isinstance(value, str):
+                        collected.append(value)
+            return "".join(collected)
+        return ""
+
+    @classmethod
+    def _extract_delta_text(cls, data: Dict[str, Any]) -> str:
+        choices = data.get("choices", []) if isinstance(data, dict) else []
+        if not choices:
+            return ""
+
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            return ""
+
+        delta = choice.get("delta", {})
+        if isinstance(delta, dict):
+            delta_content = cls._extract_content_value(delta.get("content"))
+            if delta_content:
+                return delta_content
+
+        # Beberapa gateway streaming tetap memakai message/text pada setiap chunk.
+        message = choice.get("message", {})
+        if isinstance(message, dict):
+            message_content = cls._extract_content_value(message.get("content"))
+            if message_content:
+                return message_content
+
+        text = choice.get("text")
+        if isinstance(text, str):
+            return text
+
+        return ""
+
+    @classmethod
+    def _extract_text(cls, data: Dict[str, Any]) -> str:
+        if isinstance(data, dict):
+            output_text = data.get("output_text")
+            if isinstance(output_text, str) and output_text.strip():
+                return output_text.strip()
+
+        choices = data.get("choices", []) if isinstance(data, dict) else []
         if not choices:
             raise ValueError("field choices kosong pada respons API")
 
-        message = choices[0].get("message", {})
-        content = message.get("content")
-        if isinstance(content, str) and content.strip():
-            return content.strip()
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            raise ValueError("format choices tidak valid pada respons API")
+
+        message = choice.get("message", {})
+        if isinstance(message, dict):
+            content = cls._extract_content_value(message.get("content"))
+            if content.strip():
+                return content.strip()
 
         # Fallback untuk beberapa endpoint kompatibel yang memakai field text.
-        text = choices[0].get("text")
+        text = choice.get("text")
         if isinstance(text, str) and text.strip():
             return text.strip()
+
+        # Fallback untuk format streaming chunk tunggal.
+        delta_text = cls._extract_delta_text(data)
+        if delta_text.strip():
+            return delta_text.strip()
 
         raise ValueError("tidak menemukan content/text pada respons API")

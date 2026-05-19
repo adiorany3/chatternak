@@ -459,7 +459,10 @@ with st.sidebar:
     if openai_client.is_configured:
         st.success("OpenAI-compatible API aktif")
     else:
-        st.warning("API belum aktif. Isi API key di config.toml")
+        st.warning("API belum aktif")
+        st.caption(openai_client.status_reason)
+    st.caption(f"Sumber API key: {openai_client.api_key_source}")
+    st.caption(f"Config umum: {openai_client.config_path}")
     st.caption(f"Endpoint: {openai_client.chat_completions_url}")
 
     model_ids = [model["id"] for model in model_catalog]
@@ -478,6 +481,20 @@ with st.sidebar:
         f"Biaya: input {format_rupiah(selected_model_info['input_per_1m_rp'])}/1M token, "
         f"output {format_rupiah(selected_model_info['output_per_1m_rp'])}/1M token"
     )
+    if st.button("Tes koneksi API"):
+        with st.spinner("Mengetes koneksi API..."):
+            test_response = openai_client.generate_response(
+                prompt="Balas singkat dengan kata: aktif",
+                context="Anda hanya perlu membalas singkat untuk tes koneksi API.",
+                temperature=0,
+                model=selected_model_id,
+                max_tokens=20,
+            )
+        if test_response.startswith("Error:"):
+            st.error(test_response)
+        else:
+            st.success(f"Tes berhasil: {test_response}")
+
     st.session_state.selected_temperature = st.slider(
         "Temperature",
         min_value=0.0,

@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+PROJECT_DIR = Path(__file__).resolve().parent
+
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover
@@ -21,9 +23,12 @@ def load_model_catalog(path: str | Path = "models.toml") -> List[Dict[str, Any]]
     """Membaca daftar model dari models.toml.
 
     Mengembalikan minimal satu model agar aplikasi tetap bisa berjalan
-    meskipun file models.toml belum ada atau formatnya salah.
+    meskipun file models.toml belum ada atau formatnya salah. Path relatif
+    diarahkan ke folder project agar tetap terbaca dari lokasi run mana pun.
     """
     catalog_path = Path(path)
+    if not catalog_path.is_absolute():
+        catalog_path = PROJECT_DIR / catalog_path
     if not catalog_path.exists():
         return [DEFAULT_MODEL.copy()]
 

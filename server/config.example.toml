@@ -1,9 +1,8 @@
-# Konfigurasi OpenAI-compatible Chat Completions API
-# Isi api_key dengan token Anda. Jangan unggah config.toml berisi token asli ke GitHub publik.
+# Contoh konfigurasi umum OpenAI-compatible Chat Completions API.
+# API key disimpan di Streamlit Secrets, bukan di config.toml.
 
 [openai]
 enabled = true
-api_key = "ISI_API_KEY_ANDA_DI_SINI"
 chat_completions_url = "https://api.slashai.my.id/v1/chat/completions"
 model = "slashai/gpt-5-mini"
 temperature = 0.7

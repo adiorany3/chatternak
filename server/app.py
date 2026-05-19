@@ -1,46 +1,70 @@
-# Chat Ternak Server
-# Python FastAPI Server for Farm Chatbot
-# Author: Galuh Adi Insani
-
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import random
+import streamlit as st
 import re
-import nltk
-from nltk.stem import WordNetLemmatizer
-from datetime import datetime
-import numpy as np
-
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+import random
 import json
 import os
-from deepseek_integration import DeepSeekAPI
-from gemini_integration import GeminiAPI  # Import the new GeminiAPI class
+import numpy as np
+from datetime import datetime
+import nltk
+from nltk.stem import WordNetLemmatizer
+from openai_integration import OpenAIChatAPI
 
-# Initialize AI API clients
-deepseek_client = DeepSeekAPI()
-gemini_client = GeminiAPI()  # Menghapus API key dari kode, akan menggunakan variabel lingkungan
+# Initialize OpenAI-compatible API client from config.toml
+openai_client = OpenAIChatAPI()
 
-# Set the default AI provider (can be 'deepseek' or 'gemini')
-ai_provider = os.environ.get("AI_PROVIDER", "deepseek")
+# Download NLTK data - ensuring the required packages are available
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt', quiet=True)
 
-# Download NLTK data (uncomment jika perlu)
-# nltk.download('punkt')
-# nltk.download('wordnet')
+try:
+    nltk.data.find('corpora/wordnet')
+except LookupError:
+    nltk.download('wordnet', quiet=True)
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# If punkt tokenizer not found, download it
+try:
+    nltk.download('all', quiet=True)
+except:
+    pass
+
+# Page configuration
+st.set_page_config(
+    page_title="Chat Ternak - Farming Chat Bot",
+    page_icon="🐄",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
 
 # Inisialisasi lemmatizer
 lemmatizer = WordNetLemmatizer()
+
+# Feed rates for different animal types (move this to global scope)
+feed_rates = {
+    'sapi': 0.03,  # 3% dari berat badan
+    'kambing': 0.04,  # 4% dari berat badan
+    'ayam': 0.1,  # 10% dari berat badan
+    'bebek': 0.08,  # 8% dari berat badan
+    'ikan': 0.05,  # 5% dari berat badan
+    'kelinci': 0.07  # 7% dari berat badan
+}
+
+# Default weights for different animal types (move this to global scope)
+default_weights = {
+    'sapi': 400,  # kg
+    'kambing': 40,  # kg
+    'ayam': 2,  # kg
+    'bebek': 3,  # kg
+    'ikan': 0.5,  # kg
+    'kelinci': 4  # kg
+}
 
 # Basis pengetahuan peternakan
 farming_knowledge = {
     # Ternak Sapi (Cattle)
     'sapi': {
-        'info': 'Sapi adalah hewan ternak yang umum dibudidayakan untuk daging, susu, dan tenaga kerja. Di Indonesia, beberapa jenis sapi yang populer adalah sapi Bali, sapi Madura, dan sapi PO (Peranakan Ongole).',
+        'info': 'Sapi adalah hewan ternak yang umum dibudidayakan untuk daging, susu, dan tenaga kerja. Di Indonesia, beberapa jenis sapi yang populer adalah sapi Bali, sapi Madura, dan sapi PO (Peranakan Ongole). Sapi memiliki kaki 4, tubuh besar, dan memiliki sistem pencernaan ruminansia.',
         'perawatan': 'Perawatan sapi meliputi pemberian pakan berkualitas (hijauan dan konsentrat), kandang yang bersih, vaksinasi rutin, dan pemeriksaan kesehatan.',
         'pakan': 'Pakan sapi terdiri dari hijauan (rumput gajah, rumput raja) dan konsentrat (dedak, ampas tahu, bungkil kelapa). Sapi dewasa membutuhkan sekitar 10% dari berat badannya untuk pakan hijauan per hari.',
         'reproduksi': 'Masa kebuntingan sapi sekitar 9 bulan. Deteksi birahi penting untuk keberhasilan perkawinan. Sapi dapat dikawinkan secara alami atau dengan Inseminasi Buatan (IB).',
@@ -49,7 +73,7 @@ farming_knowledge = {
     
     # Ternak Kambing (Goats)
     'kambing': {
-        'info': 'Kambing adalah ternak yang mudah dipelihara dan memiliki nilai ekonomi tinggi. Jenis kambing di Indonesia antara lain kambing Kacang, kambing Etawa, dan kambing Jawarandu.',
+        'info': 'Kambing adalah ternak yang mudah dipelihara dan memiliki nilai ekonomi tinggi. Jenis kambing di Indonesia antara lain kambing Kacang, kambing Etawa, dan kambing Jawarandu. Kambing dapat dibudidayakan untuk daging, susu, dan kulit.',
         'perawatan': 'Kambing membutuhkan kandang yang kering dan bersih, pakan yang cukup, dan perawatan kuku secara berkala. Kambing juga perlu divaksin terhadap penyakit seperti tetanus dan enterotoksemia.',
         'pakan': 'Kambing adalah ruminansia yang memakan berbagai jenis daun-daunan, rumput, dan leguminosa. Pakan tambahan seperti ampas tahu dan dedak bisa diberikan untuk meningkatkan produktivitas.',
         'reproduksi': 'Masa kebuntingan kambing sekitar 5 bulan. Kambing betina dapat melahirkan 1-3 anak per kelahiran dan dapat beranak hingga 2 kali dalam setahun dengan manajemen yang baik.',
@@ -226,23 +250,8 @@ def predict_growth(initial_weight, daily_gain, days):
 # Fungsi untuk hitung kebutuhan pakan
 def calculate_feed_needs(animal_type, count, avg_weight=None):
     """Hitung kebutuhan pakan berdasarkan jenis dan jumlah ternak"""
-    feed_rates = {
-        'sapi': 0.03,  # 3% dari berat badan
-        'kambing': 0.04,  # 4% dari berat badan
-        'ayam': 0.1,  # 10% dari berat badan
-        'bebek': 0.08,  # 8% dari berat badan
-        'ikan': 0.05,  # 5% dari berat badan
-        'kelinci': 0.07  # 7% dari berat badan
-    }
-    
-    default_weights = {
-        'sapi': 400,  # kg
-        'kambing': 40,  # kg
-        'ayam': 2,  # kg
-        'bebek': 3,  # kg
-        'ikan': 0.5,  # kg
-        'kelinci': 4  # kg
-    }
+    # Use the global feed_rates and default_weights dictionaries
+    global feed_rates, default_weights
     
     try:
         animal_type = animal_type.lower()
@@ -287,62 +296,32 @@ def calculate_bep(fixed_cost, price_per_unit, variable_cost_per_unit):
     except Exception as e:
         return f"Gagal menghitung BEP: {str(e)}"
 
-# Integrate DeepSeek and Gemini into the get_bot_response function
+# Fungsi untuk memperoleh respons bot
 def get_bot_response(message):
     message = message.lower()
     
-    # Check if the message is asking to switch to Gemini API
-    if "gunakan pilihan api gemini" in message or "pakai gemini" in message or "gunakan gemini" in message:
-        global ai_provider
-        ai_provider = "gemini"
-        return "Berhasil beralih ke Gemini API untuk pertanyaan kompleks. Silakan ajukan pertanyaan Anda."
-    
-    # Check if the message is asking to switch to DeepSeek API
-    if "gunakan pilihan api deepseek" in message or "pakai deepseek" in message or "gunakan deepseek" in message:
-        global ai_provider
-        ai_provider = "deepseek"
-        return "Berhasil beralih ke DeepSeek API untuk pertanyaan kompleks. Silakan ajukan pertanyaan Anda."
-    
-    # Try AI API first for more advanced responses
+    # Try OpenAI-compatible API first for more advanced responses
     try:
         # Check if message is complex or requires detailed knowledge
         complex_keywords = ["bagaimana", "jelaskan", "solusi", "strategi", "metode", "teknologi", "modern", 
-                           "terbaru", "penelitian", "studi", "inovasi"]
+                            "terbaru", "penelitian", "studi", "inovasi"]
         
-        if any(keyword in message.lower() for keyword in complex_keywords) or len(message.split()) > 6:
-            # Prepare a fallback response based on our local knowledge base
-            fallback_response = None
-            
-            # Generate fallback response from our farming_knowledge base
-            for topic in farming_knowledge:
-                if topic in message:
-                    fallback_response = farming_knowledge[topic]['info']
-                    break
-            
-            if not fallback_response:
-                fallback_response = random.choice(intents["fallback"]["responses"])
-            
-            # This question seems complex, use selected AI provider for better response
-            context = "Informasi tentang peternakan di Indonesia, termasuk jenis ternak, perawatan, pakan, dan praktik terbaik. Berikan informasi yang akurat dan bermanfaat untuk peternak Indonesia."
-            
-            if ai_provider == "gemini":
-                return gemini_client.generate_response(
+        if openai_client.is_configured and (any(keyword in message.lower() for keyword in complex_keywords) or len(message.split()) > 6):
+            # This question seems complex, use OpenAI-compatible endpoint for better response
+            with st.spinner('Mencari jawaban dengan OpenAI API...'):
+                openai_response = openai_client.generate_response(
                     prompt=message,
-                    context=context,
-                    temperature=0.7,
-                    fallback_response=fallback_response
+                    context="Informasi tentang peternakan di Indonesia, termasuk jenis ternak, perawatan, pakan, dan praktik terbaik. Berikan informasi yang akurat, ringkas, dan bermanfaat untuk peternak Indonesia.",
+                    temperature=0.7
                 )
-            else:  # default to DeepSeek
-                return deepseek_client.generate_response(
-                    prompt=message,
-                    context=context,
-                    temperature=0.7,
-                    fallback_response=fallback_response
-                )
+                
+                if openai_response and not openai_response.startswith("Error:"):
+                    return openai_response
+            # If OpenAI endpoint fails, fall back to rule-based responses
     except Exception as e:
-        print(f"AI API error ({ai_provider}): {str(e)}")
+        print(f"OpenAI API error: {str(e)}")
     
-    # If AI API failed or wasn't used, continue with rule-based bot response
+    # If OpenAI endpoint failed, is disabled, or wasn't used, continue with rule-based bot response
     
     # Cek pola pertanyaan dengan Python processing
     # Cek greeting, thanks, bye
@@ -430,28 +409,223 @@ def get_bot_response(message):
     # Default response jika tidak ada kecocokan
     return random.choice(intents["fallback"]["responses"])
 
-@app.route('/api/chat', methods=['POST'])
-def chat():
-    data = request.json
-    user_message = data.get('message', '')
+# Function to visualize growth prediction
+def plot_growth_prediction(result):
+    import matplotlib.pyplot as plt
+    import seaborn as sns
     
-    if not user_message:
-        return jsonify({'error': 'No message provided'}), 400
+    # Set the style
+    sns.set_style("whitegrid")
     
-    response = get_bot_response(user_message)
-    return jsonify({'response': response})
+    # Create figure
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Plot the data
+    days = list(range(len(result['weights'])))
+    ax.plot(days, result['weights'], marker='o', linestyle='-', color='#1f77b4')
+    
+    # Add labels and title
+    ax.set_xlabel('Hari')
+    ax.set_ylabel('Berat (kg)')
+    ax.set_title(f'Prediksi Pertumbuhan Ternak: {result["initial_weight"]} kg → {result["final_weight"]:.2f} kg')
+    
+    # Add text annotations
+    ax.text(0.05, 0.95, f'Berat awal: {result["initial_weight"]} kg', transform=ax.transAxes)
+    ax.text(0.05, 0.90, f'Berat akhir: {result["final_weight"]:.2f} kg', transform=ax.transAxes)
+    ax.text(0.05, 0.85, f'Pertambahan total: {result["weight_gain"]:.2f} kg', transform=ax.transAxes)
+    ax.text(0.05, 0.80, f'Periode: {result["days"]} hari', transform=ax.transAxes)
+    
+    # Return the figure
+    return fig
 
-@app.route('/api/analyze', methods=['POST'])
-def analyze():
-    data = request.json
-    data_type = data.get('type', 'unknown')
-    values = data.get('values', [])
-    
-    if not values:
-        return jsonify({'error': 'No data provided'}), 400
-    
-    result = analyze_data(data_type, values)
-    return jsonify({'result': result})
+# Initialize session state
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+# Main UI elements
+st.title("🐄 Chat Ternak - Farming Chat Bot")
+st.markdown("Chatbot cerdas untuk informasi peternakan dan pertanian")
+
+# Sidebar with options
+with st.sidebar:
+    st.header("Tentang Chat Ternak")
+    st.info("Chat Ternak adalah chatbot interaktif yang dapat memberikan informasi tentang peternakan dan pertanian.")
+
+    st.header("Status Integrasi AI")
+    if openai_client.is_configured:
+        st.success("OpenAI-compatible API aktif")
+    else:
+        st.warning("API belum aktif. Isi API key di config.toml")
+    st.caption(f"Endpoint: {openai_client.chat_completions_url}")
+    st.caption(f"Model: {openai_client.model}")
+    
+    st.header("Fitur")
+    st.markdown("""
+    - Informasi tentang hewan ternak:
+        - 🐄 Sapi
+        - 🐐 Kambing
+        - 🐓 Ayam
+        - 🦆 Bebek
+        - 🐟 Ikan
+        - 🐇 Kelinci
+    - 🌱 Informasi pupuk organik
+    - 📊 Analisis data pertanian
+    - 📈 Prediksi pertumbuhan
+    - 💰 Analisis ekonomi
+    """)
+    
+    # Tool selection
+    st.header("Alat Analisis")
+    tool_option = st.selectbox(
+        "Pilih alat analisis:",
+        ["Chat", "Kalkulator Pakan", "Prediksi Pertumbuhan", "Analisis BEP"]
+    )
+
+# Main content based on selected tool
+if tool_option == "Chat":
+    # Display chat messages from history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Input field for new messages
+    if prompt := st.chat_input("Tanyakan sesuatu tentang peternakan..."):
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Generate and display bot response
+        with st.chat_message("assistant"):
+            response = get_bot_response(prompt)
+            st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+
+elif tool_option == "Kalkulator Pakan":
+    st.header("Kalkulator Kebutuhan Pakan")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        animal_type = st.selectbox(
+            "Jenis Ternak",
+            ["sapi", "kambing", "ayam", "bebek", "ikan", "kelinci"]
+        )
+        count = st.number_input("Jumlah Ternak (ekor)", min_value=1, value=10)
+    
+    with col2:
+        weight = st.number_input(
+            "Berat Rata-rata (kg)", 
+            min_value=0.1, 
+            value=float(default_weights.get(animal_type, 1.0)),
+            step=0.1
+        )
+    
+    if st.button("Hitung Kebutuhan Pakan"):
+        result = calculate_feed_needs(animal_type, count, weight)
+        st.success(result)
+        
+        # Create bar chart for visualization
+        feed_data = {
+            'Periode': ['Harian', 'Bulanan'],
+            'Kebutuhan Pakan (kg)': [
+                weight * feed_rates[animal_type] * count,
+                weight * feed_rates[animal_type] * count * 30
+            ]
+        }
+        
+        st.bar_chart(feed_data, x='Periode')
+
+elif tool_option == "Prediksi Pertumbuhan":
+    st.header("Prediksi Pertumbuhan Ternak")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        animal_type = st.selectbox(
+            "Jenis Ternak",
+            ["sapi", "kambing", "ayam", "bebek", "ikan", "kelinci"]
+        )
+        initial_weight = st.number_input("Berat Awal (kg)", min_value=0.1, value=1.0, step=0.1)
+    
+    with col2:
+        daily_gain = st.number_input("Pertambahan Berat Harian (kg/hari)", min_value=0.001, value=0.1, step=0.01)
+        days = st.number_input("Periode (hari)", min_value=1, value=30)
+    
+    if st.button("Prediksi Pertumbuhan"):
+        result = predict_growth(initial_weight, daily_gain, days)
+        
+        if 'error' in result:
+            st.error(f"Terjadi kesalahan: {result['error']}")
+        else:
+            st.success(f"Prediksi pertumbuhan {animal_type}:")
+            st.write(f"- Berat awal: {result['initial_weight']} kg")
+            st.write(f"- Berat akhir setelah {result['days']} hari: {result['final_weight']:.2f} kg")
+            st.write(f"- Total pertambahan berat: {result['weight_gain']:.2f} kg")
+            
+            # Plot the growth prediction
+            fig = plot_growth_prediction(result)
+            st.pyplot(fig)
+
+elif tool_option == "Analisis BEP":
+    st.header("Analisis Break Even Point (BEP)")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        fixed_cost = st.number_input("Biaya Tetap (Rp)", min_value=0, value=10000000)
+        price_per_unit = st.number_input("Harga Jual per Unit (Rp)", min_value=0, value=50000)
+    
+    with col2:
+        variable_cost_per_unit = st.number_input("Biaya Variabel per Unit (Rp)", min_value=0, value=30000)
+    
+    if st.button("Hitung BEP"):
+        if price_per_unit == variable_cost_per_unit:
+            st.error("Harga jual sama dengan biaya variabel, BEP tidak dapat dihitung.")
+        else:
+            bep_units = fixed_cost / (price_per_unit - variable_cost_per_unit)
+            bep_revenue = bep_units * price_per_unit
+            
+            st.success("Analisis BEP (Break Even Point):")
+            st.write(f"- Jumlah unit pada titik impas: {bep_units:.2f} unit")
+            st.write(f"- Pendapatan pada titik impas: Rp {bep_revenue:,.2f}")
+            st.write(f"- Artinya Anda perlu menjual minimal {bep_units:.2f} unit untuk tidak rugi.")
+            
+            # Create BEP visualization
+            import matplotlib.pyplot as plt
+            
+            # Create data for plotting
+            units = np.linspace(0, bep_units * 2, 100)
+            fixed_costs = np.ones_like(units) * fixed_cost
+            variable_costs = units * variable_cost_per_unit
+            total_costs = fixed_costs + variable_costs
+            revenue = units * price_per_unit
+            
+            # Create plot
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(units, fixed_costs, label='Biaya Tetap', linestyle='--')
+            ax.plot(units, total_costs, label='Total Biaya')
+            ax.plot(units, revenue, label='Pendapatan')
+            
+            # Mark BEP point
+            ax.axvline(x=bep_units, color='r', linestyle=':', alpha=0.5)
+            ax.axhline(y=bep_revenue, color='r', linestyle=':', alpha=0.5)
+            ax.plot([bep_units], [bep_revenue], 'ro', markersize=8)
+            ax.annotate(f'BEP ({bep_units:.1f} unit, Rp {bep_revenue:,.0f})', 
+                        xy=(bep_units, bep_revenue),
+                        xytext=(bep_units + 5, bep_revenue + fixed_cost * 0.1),
+                        arrowprops=dict(facecolor='black', shrink=0.05, width=1.5))
+            
+            # Add labels and legend
+            ax.set_xlabel('Jumlah Unit')
+            ax.set_ylabel('Rupiah (Rp)')
+            ax.set_title('Analisis Break Even Point (BEP)')
+            ax.grid(True)
+            ax.legend()
+            
+            # Show the plot
+            st.pyplot(fig)
+
+# Footer
+st.markdown("---")
+st.markdown("© 2025 Chat Ternak (Beta Version) - Farming Chat Bot | Created by Galuh Adi Insani")

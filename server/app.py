@@ -37,6 +37,23 @@ from farm_profile import (
 from farm_records import add_record, performance_flags, records_context, summarize_records
 from feed_formulation import LOCAL_FEED_INGREDIENTS, formula_feedback, simple_ruminant_ration
 from health_triage import health_prompt_context, local_triage_summary, triage_level
+from decision_support import (
+    BIOSECURITY_ITEMS,
+    CONSULTATION_TOPICS,
+    EDUCATION_MODULES,
+    EXPLANATION_LEVELS,
+    LOCAL_LIBRARY,
+    SOP_TEMPLATES,
+    USER_MODES,
+    audience_context,
+    benchmark_kpi,
+    biosecurity_score,
+    generate_sop,
+    guided_case_context,
+    guided_questions,
+    predict_operations,
+    readiness_score,
+)
 from model_catalog import format_model_option, format_rupiah, get_model_by_id, load_model_catalog
 from openai_integration import DEFAULT_CONFIG, OpenAIChatAPI
 from session_storage import build_session_payload, export_session_xlsx, import_session_xlsx, session_filename
@@ -69,9 +86,16 @@ APP_MODES = [
     "Dashboard Farm",
     "AI Insight",
     "Chat Pakar",
+    "Konsultasi Bertahap",
     "Profil Peternakan",
     "Konsultasi Kesehatan",
     "Formulasi Pakan",
+    "Benchmark KPI",
+    "SOP & Biosecurity",
+    "Prediksi Usaha",
+    "Library Lokal",
+    "Edukasi Peternak",
+    "Laporan Manajemen",
     "Catatan Performa",
     "Kalender Manajemen",
     "Kalkulator Pakan",
@@ -95,6 +119,14 @@ def init_state() -> None:
         "session_estimated_cost_rp": 0.0,
         "admin_authenticated": False,
         "admin_login_error": "",
+        "user_mode": "Peternak Rakyat",
+        "explanation_level": "Normal",
+        "guided_case": {},
+        "guided_topic": "Kesehatan",
+        "biosecurity_checked": [],
+        "last_sop": {},
+        "last_prediction": {},
+        "education_progress": [],
         "farm_profile": dict(DEFAULT_PROFILE),
         "farm_records": [],
         "farm_calendar_events": [],
@@ -170,6 +202,16 @@ def build_current_session_payload() -> Dict[str, Any]:
         last_ai_insight=st.session_state.last_ai_insight,
         formula_selected=st.session_state.formula_selected,
         usage=current_usage_payload(),
+        app_state={
+            "user_mode": st.session_state.user_mode,
+            "explanation_level": st.session_state.explanation_level,
+            "guided_case": st.session_state.guided_case,
+            "guided_topic": st.session_state.guided_topic,
+            "biosecurity_checked": st.session_state.biosecurity_checked,
+            "last_sop": st.session_state.last_sop,
+            "last_prediction": st.session_state.last_prediction,
+            "education_progress": st.session_state.education_progress,
+        },
     )
 
 
@@ -206,6 +248,15 @@ def restore_session_from_payload(payload: Dict[str, Any]) -> None:
     st.session_state.last_health_case = dict(payload.get("last_health_case", {}) or {})
     st.session_state.last_ai_insight = dict(payload.get("last_ai_insight", {}) or {})
     st.session_state.formula_selected = list(payload.get("formula_selected", []) or [])
+    app_state = payload.get("app_state", {}) or {}
+    st.session_state.user_mode = str(app_state.get("user_mode") or st.session_state.get("user_mode", "Peternak Rakyat"))
+    st.session_state.explanation_level = str(app_state.get("explanation_level") or st.session_state.get("explanation_level", "Normal"))
+    st.session_state.guided_case = dict(app_state.get("guided_case", {}) or {})
+    st.session_state.guided_topic = str(app_state.get("guided_topic") or "Kesehatan")
+    st.session_state.biosecurity_checked = list(app_state.get("biosecurity_checked", []) or [])
+    st.session_state.last_sop = dict(app_state.get("last_sop", {}) or {})
+    st.session_state.last_prediction = dict(app_state.get("last_prediction", {}) or {})
+    st.session_state.education_progress = list(app_state.get("education_progress", []) or [])
     st.session_state.session_request_count = int(float(usage.get("requests", 0) or 0))
     st.session_state.session_prompt_tokens = int(float(usage.get("prompt_tokens", 0) or 0))
     st.session_state.session_completion_tokens = int(float(usage.get("completion_tokens", 0) or 0))
@@ -411,7 +462,7 @@ def run_ai_consultation(prompt: str, selected_model_id: str, selected_fallback_m
         profile=st.session_state.farm_profile,
         records=st.session_state.farm_records,
         calendar_events=st.session_state.farm_calendar_events,
-        extra_context=extra_context,
+        extra_context=(audience_context(st.session_state.user_mode, st.session_state.explanation_level) + "\n" + extra_context).strip(),
     )
 
 
@@ -924,6 +975,332 @@ def render_bep() -> None:
 
 
 
+
+def render_guided_consultation(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.header("Konsultasi Bertahap")
+    st.caption("Untuk peternak yang belum tahu istilah teknis. Sistem akan mengecek data yang kurang sebelum memberi rekomendasi.")
+
+    topic = st.selectbox(
+        "Topik konsultasi",
+        CONSULTATION_TOPICS,
+        index=CONSULTATION_TOPICS.index(st.session_state.get("guided_topic", "Kesehatan")) if st.session_state.get("guided_topic", "Kesehatan") in CONSULTATION_TOPICS else 0,
+    )
+    st.session_state.guided_topic = topic
+    case = dict(st.session_state.get("guided_case", {}) or {})
+
+    field_groups = {
+        "Kesehatan": [
+            ("jenis_ternak", "Jenis ternak", "contoh: kambing / ayam broiler / lele"),
+            ("jumlah_populasi", "Jumlah populasi", "contoh: 25 ekor"),
+            ("umur_fase", "Umur/fase", "contoh: 3 bulan / starter / bunting"),
+            ("jumlah_terdampak", "Jumlah terdampak", "contoh: 3 ekor"),
+            ("gejala", "Gejala utama", "contoh: mencret, lemas, tidak mau makan"),
+            ("durasi", "Durasi", "contoh: sejak kemarin"),
+            ("kematian", "Kematian", "contoh: belum ada / 2 ekor mati"),
+            ("pakan_air", "Pakan dan air terakhir", "contoh: dedak + rumput, air sumur"),
+            ("kondisi_kandang", "Kondisi kandang/kolam", "contoh: lembap, bau amonia, padat"),
+            ("target_masalah", "Target bantuan", "contoh: tindakan awal aman"),
+        ],
+        "Pakan": [
+            ("jenis_ternak", "Jenis ternak", "contoh: sapi penggemukan"),
+            ("jumlah_populasi", "Jumlah populasi", "contoh: 10 ekor"),
+            ("umur_fase", "Fase", "contoh: finisher / laktasi"),
+            ("bobot_rata_rata", "Bobot rata-rata", "contoh: 28 kg"),
+            ("bahan_pakan", "Bahan pakan tersedia", "contoh: odot, dedak, ampas tahu"),
+            ("harga_bahan", "Harga bahan", "contoh: dedak 3500/kg"),
+            ("konsumsi_pakan", "Konsumsi pakan saat ini", "contoh: 40 kg/hari"),
+            ("tujuan_formula", "Tujuan formula", "contoh: murah tapi aman"),
+            ("target_masalah", "Masalah utama", "contoh: biaya pakan terlalu tinggi"),
+        ],
+        "Reproduksi": [
+            ("jenis_ternak", "Jenis ternak", "contoh: sapi / kambing / kelinci"),
+            ("jumlah_populasi", "Jumlah induk", "contoh: 8 induk"),
+            ("umur_fase", "Umur/fase induk", "contoh: induk laktasi"),
+            ("tanggal_kawin_ib", "Tanggal kawin/IB", "contoh: 2026-05-01"),
+            ("riwayat_beranak", "Riwayat beranak", "contoh: sudah 2 kali"),
+            ("tanda_birahi", "Tanda birahi", "contoh: gelisah, vulva merah"),
+            ("kondisi_induk", "Kondisi induk", "contoh: kurus/sedang/gemuk"),
+            ("target_masalah", "Masalah utama", "contoh: sulit bunting"),
+        ],
+        "Usaha/Biaya": [
+            ("jenis_ternak", "Jenis ternak", "contoh: broiler / kambing"),
+            ("jumlah_populasi", "Jumlah populasi", "contoh: 500 ekor"),
+            ("umur_fase", "Fase", "contoh: umur 21 hari"),
+            ("modal", "Modal/biaya berjalan", "contoh: Rp 15 juta"),
+            ("biaya_pakan", "Biaya pakan", "contoh: Rp 250 ribu/hari"),
+            ("harga_jual", "Harga jual target", "contoh: Rp 55 ribu/kg"),
+            ("target_panen", "Target panen", "contoh: 30 hari lagi"),
+            ("tenaga_kerja", "Tenaga kerja", "contoh: 2 orang"),
+            ("target_masalah", "Masalah utama", "contoh: hitung untung/rugi"),
+        ],
+        "Kandang/Kolam": [
+            ("jenis_ternak", "Jenis ternak", "contoh: kambing / lele"),
+            ("jumlah_populasi", "Jumlah populasi", "contoh: 1000 ekor"),
+            ("umur_fase", "Fase", "contoh: pembesaran"),
+            ("tipe_kandang", "Tipe kandang/kolam", "contoh: kandang panggung / kolam terpal"),
+            ("ukuran", "Ukuran", "contoh: 4x6 m"),
+            ("kepadatan", "Kepadatan", "contoh: 15 ekor/kandang"),
+            ("drainase_ventilasi", "Drainase/ventilasi/aerasi", "contoh: kurang lancar"),
+            ("masalah_lingkungan", "Masalah lingkungan", "contoh: bau, becek, air keruh"),
+            ("target_masalah", "Target bantuan", "contoh: susun perbaikan kandang"),
+        ],
+        "Produksi": [
+            ("jenis_ternak", "Jenis ternak", "contoh: ayam layer / sapi perah"),
+            ("jumlah_populasi", "Jumlah populasi", "contoh: 200 ekor"),
+            ("umur_fase", "Fase", "contoh: awal produksi"),
+            ("produksi_harian", "Produksi harian", "contoh: 150 telur/hari"),
+            ("bobot_awal", "Bobot awal", "contoh: 20 kg"),
+            ("bobot_sekarang", "Bobot sekarang", "contoh: 26 kg"),
+            ("pakan_harian", "Pakan harian", "contoh: 30 kg"),
+            ("mortalitas", "Mortalitas/sakit", "contoh: 2 ekor"),
+            ("target_masalah", "Masalah utama", "contoh: produksi turun"),
+        ],
+    }
+
+    with st.form("guided_consultation_form"):
+        updated_case: Dict[str, Any] = {}
+        for key, label, placeholder in field_groups.get(topic, field_groups["Kesehatan"]):
+            if key in {"gejala", "pakan_air", "kondisi_kandang", "bahan_pakan", "harga_bahan", "target_masalah", "masalah_lingkungan"}:
+                updated_case[key] = st.text_area(label, value=str(case.get(key, "")), placeholder=placeholder, height=80)
+            else:
+                updated_case[key] = st.text_input(label, value=str(case.get(key, "")), placeholder=placeholder)
+        submitted = st.form_submit_button("Simpan & Analisis Bertahap", use_container_width=True)
+
+    missing = guided_questions(topic, updated_case if submitted else case)
+    if submitted:
+        st.session_state.guided_case = updated_case
+        case = updated_case
+        st.success("Data konsultasi tersimpan.")
+
+    if case:
+        st.subheader("Data yang masih kurang")
+        if missing:
+            for question in missing[:8]:
+                st.warning(question)
+        else:
+            st.success("Data utama sudah cukup untuk analisis awal.")
+
+        if st.button("Minta Rekomendasi AI dari Data Ini", use_container_width=True):
+            prompt = "Beri konsultasi bertahap sesuai data kasus. Jika data masih kurang, jawab dengan asumsi sementara dan pertanyaan lanjutan paling penting."
+            with st.spinner("AI menyusun konsultasi bertahap..."):
+                response, meta = run_ai_consultation(
+                    prompt,
+                    selected_model_id,
+                    selected_fallback_models,
+                    selected_temperature,
+                    max_history_messages,
+                    prefer_ai,
+                    extra_context=guided_case_context(topic, case),
+                )
+            update_usage(meta)
+            st.markdown(response)
+            render_ai_trace(meta)
+
+
+def render_benchmark_kpi(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.header("Benchmark KPI Performa")
+    st.caption("Membandingkan catatan farm dengan indikator dasar seperti ADG, FCR, mortalitas, dan kelengkapan recording.")
+    benchmark = benchmark_kpi(st.session_state.farm_profile, st.session_state.farm_records)
+    summary = benchmark["summary"]
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Risiko KPI", benchmark["risk_level"])
+    col2.metric("ADG", "-" if summary.get("adg") is None else f"{summary['adg']:.3f} kg/hari")
+    col3.metric("FCR", "-" if summary.get("fcr") is None else f"{summary['fcr']:.2f}")
+    col4.metric("Mortalitas", f"{summary.get('mortality_total', 0)} ekor")
+    st.subheader("Temuan benchmark")
+    for item in benchmark["findings"]:
+        st.write(f"- {item}")
+    if not st.session_state.farm_records:
+        st.info("Tambahkan catatan performa minimal 2 tanggal agar ADG/FCR lebih bermakna.")
+    if st.button("Minta Analisis AI KPI", use_container_width=True):
+        with st.spinner("AI menganalisis KPI farm..."):
+            response, meta = run_ai_consultation(
+                "Analisis KPI farm ini dan berikan keputusan manajerial untuk peternak.",
+                selected_model_id,
+                selected_fallback_models,
+                selected_temperature,
+                max_history_messages,
+                prefer_ai,
+                extra_context="Benchmark KPI:\n" + json.dumps(benchmark, ensure_ascii=False, indent=2),
+            )
+        update_usage(meta)
+        st.markdown(response)
+        render_ai_trace(meta)
+
+
+def render_sop_biosecurity(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.header("SOP & Biosecurity")
+    st.caption("Membuat SOP sederhana/industri dan menilai risiko biosecurity farm.")
+    st.subheader("Checklist Biosecurity")
+    checked = st.multiselect(
+        "Centang yang sudah diterapkan",
+        BIOSECURITY_ITEMS,
+        default=[item for item in st.session_state.get("biosecurity_checked", []) if item in BIOSECURITY_ITEMS],
+    )
+    st.session_state.biosecurity_checked = checked
+    score = biosecurity_score(checked)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Skor", f"{score['score']}/100")
+    col2.metric("Level", score["level"])
+    col3.metric("Checklist", f"{score['checked']}/{score['total']}")
+    if score["missing"]:
+        st.warning("Prioritas perbaikan: " + "; ".join(score["missing"][:4]))
+
+    st.subheader("Generator SOP")
+    sop_type = st.selectbox("Jenis SOP", list(SOP_TEMPLATES.keys()))
+    local_sop = generate_sop(st.session_state.farm_profile, sop_type, st.session_state.user_mode)
+    st.markdown("```text\n" + local_sop + "\n```")
+    st.download_button(
+        "Download SOP TXT",
+        data=local_sop,
+        file_name=f"sop-{sop_type.lower().replace(' ', '-')}.txt",
+        mime="text/plain",
+        use_container_width=True,
+    )
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("Simpan SOP ke Sesi", use_container_width=True):
+            st.session_state.last_sop = {"type": sop_type, "content": local_sop, "created_at": datetime.now().isoformat(timespec="seconds"), "biosecurity": score}
+            st.success("SOP tersimpan ke sesi dan backup XLSX.")
+    with col_b:
+        if st.button("Perbaiki SOP dengan AI", use_container_width=True):
+            with st.spinner("AI menyesuaikan SOP dengan profil farm..."):
+                response, meta = run_ai_consultation(
+                    "Perbaiki SOP berikut agar sesuai profil farm, skala usaha, risiko, dan mode pengguna.",
+                    selected_model_id,
+                    selected_fallback_models,
+                    selected_temperature,
+                    max_history_messages,
+                    prefer_ai,
+                    extra_context=f"SOP awal:\n{local_sop}\n\nBiosecurity score:\n{json.dumps(score, ensure_ascii=False)}",
+                )
+            update_usage(meta)
+            st.session_state.last_sop = {"type": sop_type, "content": response, "created_at": datetime.now().isoformat(timespec="seconds"), "biosecurity": score}
+            st.markdown(response)
+            render_ai_trace(meta)
+
+
+def render_business_prediction(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.header("Prediksi Usaha, Panen, dan Stok Pakan")
+    st.caption("Menghitung estimasi kebutuhan pakan, umur stok, target panen, dan gambaran pendapatan awal.")
+    p = normalise_profile(st.session_state.farm_profile)
+    col1, col2 = st.columns(2)
+    with col1:
+        feed_stock = st.number_input("Stok pakan saat ini (kg)", min_value=0.0, value=0.0, step=1.0)
+        target_weight = st.number_input("Target bobot panen per ekor (kg)", min_value=0.0, value=max(float(p.get("average_weight_kg", 0.0)), 0.0), step=0.1)
+    with col2:
+        sale_price = st.number_input("Harga jual target per ekor/unit (Rp)", min_value=0.0, value=0.0, step=1000.0)
+        extra_cost = st.number_input("Biaya tersisa sampai panen (Rp)", min_value=0.0, value=0.0, step=10000.0)
+    if st.button("Hitung Prediksi", use_container_width=True):
+        result = predict_operations(st.session_state.farm_profile, st.session_state.farm_records, feed_stock, target_weight, sale_price, extra_cost)
+        st.session_state.last_prediction = {"created_at": datetime.now().isoformat(timespec="seconds"), "input": {"feed_stock_kg": feed_stock, "target_weight_kg": target_weight, "sale_price_per_unit": sale_price, "extra_cost_rp": extra_cost}, "result": result}
+        st.success("Prediksi tersimpan ke sesi.")
+    result = st.session_state.get("last_prediction", {}).get("result", {})
+    if result:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Pakan/hari", f"{result['daily_feed_need_kg']:.2f} kg")
+        c2.metric("Stok cukup", f"{result['feed_stock_days']:.1f} hari")
+        c3.metric("Estimasi panen", result["harvest_date"])
+        c4.metric("Margin kasar", f"Rp {result['estimated_margin_before_unrecorded_cost_rp']:,.0f}".replace(",", "."))
+        st.json(result)
+        if result["feed_stock_days"] < 7:
+            st.warning("Stok pakan kurang dari 7 hari. Prioritaskan pengadaan agar konsumsi tidak turun.")
+        if st.button("Minta Insight AI Prediksi", use_container_width=True):
+            with st.spinner("AI membuat rekomendasi dari prediksi..."):
+                response, meta = run_ai_consultation(
+                    "Analisis prediksi usaha, panen, dan stok pakan ini. Berikan keputusan 24 jam, 7 hari, dan 30 hari.",
+                    selected_model_id,
+                    selected_fallback_models,
+                    selected_temperature,
+                    max_history_messages,
+                    prefer_ai,
+                    extra_context="Prediksi usaha:\n" + json.dumps(st.session_state.last_prediction, ensure_ascii=False, indent=2),
+                )
+            update_usage(meta)
+            st.markdown(response)
+            render_ai_trace(meta)
+
+
+def render_local_library() -> None:
+    st.header("Library Pengetahuan Lokal Indonesia")
+    st.caption("Referensi cepat bahan pakan, sistem kandang, dan praktik lokal yang sering dipakai peternak.")
+    query = st.text_input("Cari istilah", placeholder="contoh: odot, ampas tahu, bioflok")
+    rows = []
+    for name, data in LOCAL_LIBRARY.items():
+        text = f"{name} {data.get('kategori','')} {data.get('ringkas','')} {data.get('catatan','')}".lower()
+        if not query or query.lower() in text:
+            rows.append({"Istilah": name, "Kategori": data.get("kategori", ""), "Ringkas": data.get("ringkas", ""), "Catatan": data.get("catatan", "")})
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+    if rows:
+        st.download_button("Download Library JSON", data=json.dumps(rows, ensure_ascii=False, indent=2), file_name="library-lokal-peternakan.json", mime="application/json", use_container_width=True)
+
+
+def render_education() -> None:
+    st.header("Edukasi Peternak")
+    st.caption("Materi singkat dan kuis untuk peternak pemula maupun pengelola farm modern.")
+    module = st.selectbox("Modul belajar", list(EDUCATION_MODULES.keys()))
+    completed = set(st.session_state.get("education_progress", []) or [])
+    for idx, lesson in enumerate(EDUCATION_MODULES[module], 1):
+        lesson_id = f"{module}:{idx}"
+        with st.expander(f"{idx}. {lesson['judul']}" + (" ✓" if lesson_id in completed else ""), expanded=lesson_id not in completed):
+            st.write(lesson["materi"])
+            answer = st.text_area("Jawab kuis singkat", key=f"quiz_{lesson_id}", placeholder=lesson["kuis"], height=70)
+            if st.button("Tandai selesai", key=f"done_{lesson_id}"):
+                if lesson_id not in completed:
+                    st.session_state.education_progress.append(lesson_id)
+                st.success("Materi ditandai selesai.")
+                st.rerun()
+    total = sum(len(items) for items in EDUCATION_MODULES.values())
+    st.metric("Progress belajar", f"{len(set(st.session_state.education_progress))}/{total} materi")
+
+
+def render_management_report() -> None:
+    st.header("Laporan Manajemen")
+    st.caption("Ringkasan siap salin/unduh untuk peternak, kelompok ternak, atau manajer farm.")
+    profile = normalise_profile(st.session_state.farm_profile)
+    benchmark = benchmark_kpi(profile, st.session_state.farm_records)
+    ready = readiness_score(profile, st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.biosecurity_checked)
+    report = f"""
+# Laporan Manajemen Pakar Ternak Nusantara
+
+Tanggal: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+## Profil Farm
+- Nama: {profile.get('farm_name') or '-'}
+- Komoditas: {profile.get('animal_type')} | Tujuan: {profile.get('production_goal')} | Fase: {profile.get('phase')}
+- Populasi: {profile.get('population')} ekor | Bobot rata-rata: {profile.get('average_weight_kg')} kg
+- Lokasi: {profile.get('location') or '-'}
+- Masalah utama: {profile.get('main_problem') or '-'}
+
+## Skor Kesiapan
+- Skor: {ready['score']}/100
+- Level: {ready['level']}
+- Catatan prioritas: {'; '.join(ready['reasons']) if ready['reasons'] else 'Belum ada catatan risiko besar.'}
+
+## KPI Performa
+- Risiko KPI: {benchmark['risk_level']}
+- Temuan: {' | '.join(benchmark['findings'])}
+
+## Biosecurity
+- Skor: {ready['biosecurity']['score']}/100 ({ready['biosecurity']['level']})
+- Belum lengkap: {'; '.join(ready['biosecurity']['missing'][:5]) if ready['biosecurity']['missing'] else 'Checklist utama terpenuhi.'}
+
+## Agenda Manajemen
+- Jumlah jadwal tersimpan: {len(st.session_state.farm_calendar_events)}
+- Jumlah catatan performa: {len(st.session_state.farm_records)}
+
+## Rekomendasi Singkat
+1. Lengkapi profil dan recording jika masih kosong.
+2. Timbang/estimasi pakan dan bobot secara berkala agar ADG dan FCR terbaca.
+3. Prioritaskan biosecurity, isolasi ternak sakit, dan kebersihan tempat pakan-minum.
+4. Gunakan backup XLSX setelah setiap sesi penting.
+
+Developed by Galuh Adi Insani
+""".strip()
+    st.markdown(report)
+    st.download_button("Download Laporan Markdown", data=report, file_name="laporan-manajemen-pakar-ternak.md", mime="text/markdown", use_container_width=True)
+    st.download_button("Download Backup Lengkap XLSX", data=get_session_xlsx_bytes(), file_name=session_filename(build_current_session_payload()), mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
 def render_footer() -> None:
     st.markdown("---")
     st.markdown(
@@ -953,6 +1330,20 @@ st.caption("Asisten AI manajemen peternakan: profil farm, pakan, kesehatan, repr
 with st.sidebar:
     st.header("Mode Aplikasi")
     tool_option = st.selectbox("Mode", APP_MODES)
+
+    st.divider()
+    st.header("Mode Pengguna")
+    st.session_state.user_mode = st.selectbox(
+        "Tipe pengguna",
+        USER_MODES,
+        index=USER_MODES.index(st.session_state.user_mode) if st.session_state.user_mode in USER_MODES else 0,
+        help="Peternak Rakyat memakai bahasa lebih sederhana. Industri Modern memakai KPI, SOP, dan istilah manajerial.",
+    )
+    st.session_state.explanation_level = st.selectbox(
+        "Kedalaman penjelasan",
+        EXPLANATION_LEVELS,
+        index=EXPLANATION_LEVELS.index(st.session_state.explanation_level) if st.session_state.explanation_level in EXPLANATION_LEVELS else 1,
+    )
 
     st.divider()
     p = normalise_profile(st.session_state.farm_profile)
@@ -1027,12 +1418,26 @@ elif tool_option == "AI Insight":
     render_ai_insights(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Chat Pakar":
     render_chat(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "Konsultasi Bertahap":
+    render_guided_consultation(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Profil Peternakan":
     render_profile()
 elif tool_option == "Konsultasi Kesehatan":
     render_health_consultation(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Formulasi Pakan":
     render_feed_formulation()
+elif tool_option == "Benchmark KPI":
+    render_benchmark_kpi(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "SOP & Biosecurity":
+    render_sop_biosecurity(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "Prediksi Usaha":
+    render_business_prediction(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "Library Lokal":
+    render_local_library()
+elif tool_option == "Edukasi Peternak":
+    render_education()
+elif tool_option == "Laporan Manajemen":
+    render_management_report()
 elif tool_option == "Catatan Performa":
     render_records()
 elif tool_option == "Kalender Manajemen":

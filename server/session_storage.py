@@ -11,7 +11,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 APP_NAME = "Pakar Ternak Nusantara"
-STORAGE_VERSION = "1.0"
+STORAGE_VERSION = "1.1"
 
 HEADER_FILL = "166534"
 SUBHEADER_FILL = "DCFCE7"
@@ -189,6 +189,7 @@ def build_session_payload(
     last_ai_insight: Dict[str, Any],
     formula_selected: List[str],
     usage: Dict[str, Any],
+    app_state: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     now = datetime.now().isoformat(timespec="seconds")
     return {
@@ -205,6 +206,7 @@ def build_session_payload(
         "last_ai_insight": dict(last_ai_insight or {}),
         "formula_selected": list(formula_selected or []),
         "usage": dict(usage or {}),
+        "app_state": dict(app_state or {}),
     }
 
 
@@ -230,6 +232,7 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
     insight = payload.get("last_ai_insight", {}) or {}
     usage = payload.get("usage", {}) or {}
     formula_selected = payload.get("formula_selected", []) or []
+    app_state = payload.get("app_state", {}) or {}
 
     # Ringkasan / dashboard offline
     ws = _sheet_title(wb, "Ringkasan")
@@ -254,6 +257,9 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
         ("Jumlah Pesan Chat", len(messages)),
         ("Request AI Sesi", usage.get("requests", 0)),
         ("Estimasi Biaya AI (Rp)", usage.get("estimated_cost_rp", 0)),
+        ("Mode Pengguna", app_state.get("user_mode", "")),
+        ("Kedalaman Penjelasan", app_state.get("explanation_level", "")),
+        ("SOP Terakhir", (app_state.get("last_sop") or {}).get("type", "") if isinstance(app_state.get("last_sop"), dict) else ""),
     ]
     ws.cell(4, 1, "Metrik")
     ws.cell(4, 2, "Nilai")
@@ -261,12 +267,12 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
     for idx, (k, v) in enumerate(summary_rows, start=5):
         ws.cell(idx, 1, k)
         ws.cell(idx, 2, v)
-    ws.cell(22, 1, "Catatan Penting")
-    ws.cell(22, 1).font = Font(bold=True)
-    ws.cell(23, 1, "1. Simpan file ini di perangkat peternak sebagai backup mandiri.")
-    ws.cell(24, 1, "2. Untuk melanjutkan sesi, unggah kembali file ini di menu Backup XLSX pada aplikasi.")
-    ws.cell(25, 1, "3. Streamlit Online dapat menghapus file server saat app restart/redeploy; file download ini adalah backup utama.")
-    _style_cells(ws, 5, 25, 2)
+    ws.cell(25, 1, "Catatan Penting")
+    ws.cell(25, 1).font = Font(bold=True)
+    ws.cell(26, 1, "1. Simpan file ini di perangkat peternak sebagai backup mandiri.")
+    ws.cell(27, 1, "2. Untuk melanjutkan sesi, unggah kembali file ini di menu Backup XLSX pada aplikasi.")
+    ws.cell(28, 1, "3. Streamlit Online dapat menghapus file server saat app restart/redeploy; file download ini adalah backup utama.")
+    _style_cells(ws, 5, 28, 2)
     _set_widths(ws, {"A": 34, "B": 70})
     ws["B15"].number_format = '#,##0.00'
 
@@ -382,6 +388,25 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
     _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(FORMULA_HEADERS))
     _set_widths(ws, {"A": 8, "B": 42})
 
+    # Pengaturan dan fitur lanjutan
+    ws = _sheet_title(wb, "Pengaturan")
+    state_rows = []
+    for key, value in app_state.items():
+        state_rows.append((key, value))
+    _write_key_value_sheet(ws, "Pengaturan dan Fitur Lanjutan", state_rows, "Mode pengguna, konsultasi bertahap, SOP, prediksi, biosecurity, dan progress edukasi.")
+
+    # SOP terakhir
+    last_sop = app_state.get("last_sop", {}) if isinstance(app_state, dict) else {}
+    ws = _sheet_title(wb, "SOP_Terakhir")
+    sop_rows = [(k, v) for k, v in (last_sop or {}).items()] if isinstance(last_sop, dict) else [("content", str(last_sop))]
+    _write_key_value_sheet(ws, "SOP Terakhir", sop_rows, "SOP terakhir yang dibuat/disimpan dalam aplikasi.")
+
+    # Prediksi usaha terakhir
+    prediction = app_state.get("last_prediction", {}) if isinstance(app_state, dict) else {}
+    ws = _sheet_title(wb, "Prediksi_Usaha")
+    pred_rows = [(k, v) for k, v in (prediction or {}).items()] if isinstance(prediction, dict) else [("content", str(prediction))]
+    _write_key_value_sheet(ws, "Prediksi Usaha Terakhir", pred_rows, "Prediksi stok pakan, panen, dan estimasi usaha terakhir.")
+
     # Pemakaian AI
     ws = _sheet_title(wb, "Pemakaian_AI")
     _write_key_value_sheet(ws, "Pemakaian AI Sesi", [(k, v) for k, v in usage.items()], "Estimasi pemakaian AI selama sesi aktif.")
@@ -446,6 +471,7 @@ def import_session_xlsx(file_or_bytes: Any) -> Dict[str, Any]:
         "last_ai_insight": {},
         "formula_selected": [],
         "usage": {},
+        "app_state": {},
     }
 
     if "Profil" in wb.sheetnames:
@@ -547,6 +573,7 @@ def _normalise_imported_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     payload.setdefault("last_ai_insight", {})
     payload.setdefault("formula_selected", [])
     payload.setdefault("usage", {})
+    payload.setdefault("app_state", {})
     if not isinstance(payload["messages"], list):
         payload["messages"] = []
     if not isinstance(payload["records"], list):
@@ -563,4 +590,6 @@ def _normalise_imported_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         payload["last_ai_insight"] = {}
     if not isinstance(payload["usage"], dict):
         payload["usage"] = {}
+    if not isinstance(payload["app_state"], dict):
+        payload["app_state"] = {}
     return payload

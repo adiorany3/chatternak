@@ -48,7 +48,7 @@ Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 - Profil Peternakan.
 - Konsultasi Bertahap.
 - Konsultasi Kesehatan / Triase.
-- Formulasi Pakan berbasis bahan lokal.
+- Formulasi Pakan berbasis katalog bahan pakan Indonesia yang lebih lengkap: hijauan, leguminosa, silase/fermentasi, sumber energi, protein nabati, protein hewani, konsentrat/pakan komersial, mineral, vitamin, dan aditif umum.
 - Benchmark KPI.
 - SOP & Biosecurity.
 - Prediksi Usaha, Panen, dan Stok Pakan.
@@ -408,3 +408,18 @@ Versi ini mengurangi proses berat saat pengguna hanya berpindah dropdown/menu:
 ## Update dropdown komoditas dan bangsa/ras/strain
 - Pilihan **Bangsa / ras / strain** pada Profil Peternakan, Konsultasi Kesehatan, dan Katalog Komoditas otomatis mengikuti **Komoditas ternak** yang dipilih.
 - Saat komoditas diganti, pilihan bangsa/ras/strain yang tidak sesuai tidak dibawa ke komoditas baru.
+
+## Katalog Bahan Pakan Indonesia
+
+Modul Formulasi Pakan menyediakan katalog bahan yang umum digunakan di Indonesia, antara lain:
+
+- Hijauan: rumput odot, rumput gajah, pakchong, setaria, rumput raja, tebon jagung, jerami padi, jerami jagung, pucuk tebu.
+- Leguminosa/daun protein: indigofera, kaliandra, lamtoro, gamal, turi, daun singkong, azolla.
+- Silase/fermentasi: silase jagung, silase rumput, complete feed fermentasi, jerami amoniasi, dedak fermentasi, ampas tahu fermentasi.
+- Energi/karbohidrat: jagung giling, dedak padi, bekatul, pollard, onggok, gaplek, menir, nasi aking, molases, minyak sawit/CPO.
+- Protein nabati: bungkil kedelai, bungkil kelapa, bungkil inti sawit, bungkil kacang tanah, ampas tahu, ampas tempe, ampas kecap, DDGS, corn gluten meal.
+- Protein hewani: tepung ikan, tepung kepala udang, tepung darah, MBM, maggot BSF, cacing sutra, keong mas olahan, limbah ikan olahan.
+- Pakan komersial: konsentrat sapi/kambing/domba, pakan broiler, layer, itik, puyuh, kelinci, ikan, dan babi.
+- Mineral/aditif: mineral mix, premix, garam, kapur, DCP/MCP, grit, lisin, metionin, probiotik, yeast, toxin binder.
+
+Dropdown bahan pakan dapat difilter berdasarkan kategori dan kesesuaian komoditas agar peternak tidak bingung memilih bahan. Angka nutrisi bersifat estimasi edukatif; formula presisi tetap memerlukan uji bahan dan evaluasi performa aktual.

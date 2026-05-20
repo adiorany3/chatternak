@@ -14,6 +14,7 @@ from commodity_breeds import catalog_rows, commodity_label
 from farm_profile import goal_label, maintenance_goal_rows
 from farm_memory import memory_table_rows, normalise_memory_items
 from enterprise_features import normalise_enterprise_state, executive_summary, early_warnings, finance_snapshot, downstream_guidance, kpi_standard_for
+from feed_formulation import feed_catalog_rows
 
 APP_NAME = "AI Pakar Ternak"
 STORAGE_VERSION = "2.0"
@@ -64,6 +65,7 @@ HEALTH_HEADERS = ["Kolom", "Isi"]
 INSIGHT_HEADERS = ["Kolom", "Isi"]
 USAGE_HEADERS = ["Metrik", "Nilai"]
 FORMULA_HEADERS = ["No", "Bahan Pakan Terpilih"]
+FEED_CATALOG_HEADERS = ["Bahan", "Kategori", "Jenis", "Protein estimasi (%)", "Indeks energi", "Cocok untuk", "Catatan lapangan"]
 DECISION_LOG_HEADERS = ["Tanggal", "Pertanyaan/Masalah", "Keputusan Utama", "Prioritas", "Level Risiko", "Skor Risiko", "Sumber", "Model", "Status Tindak Lanjut", "Catatan Hasil"]
 MEMORY_HEADERS = ["Tanggal", "Kategori", "Prioritas", "Memory", "Sumber"]
 
@@ -431,6 +433,25 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
         ws.cell(header_row + 1, 1, "Belum ada bahan pakan terpilih.")
     _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(FORMULA_HEADERS))
     _set_widths(ws, {"A": 8, "B": 42})
+
+    # Katalog bahan pakan Indonesia
+    ws = _sheet_title(wb, "Katalog_Bahan_Pakan")
+    _style_title(ws, "Katalog Bahan Pakan Indonesia", "Bahan pakan umum di Indonesia untuk referensi offline peternak. Nilai nutrisi bersifat estimasi edukatif, bukan pengganti uji laboratorium.")
+    header_row = 4
+    for col, header in enumerate(FEED_CATALOG_HEADERS, start=1):
+        ws.cell(header_row, col, header)
+    _style_table(ws, header_row, len(FEED_CATALOG_HEADERS))
+    for r_idx, row in enumerate(feed_catalog_rows(), start=header_row + 1):
+        ws.cell(r_idx, 1, row.get("Bahan", ""))
+        ws.cell(r_idx, 2, row.get("Kategori", ""))
+        ws.cell(r_idx, 3, row.get("Jenis", ""))
+        ws.cell(r_idx, 4, row.get("Protein estimasi (%)", 0))
+        ws.cell(r_idx, 5, row.get("Indeks energi", 0))
+        ws.cell(r_idx, 6, row.get("Cocok untuk", ""))
+        ws.cell(r_idx, 7, row.get("Catatan lapangan", ""))
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(FEED_CATALOG_HEADERS))
+    _auto_filter(ws, header_row, len(FEED_CATALOG_HEADERS))
+    _set_widths(ws, {"A": 32, "B": 24, "C": 24, "D": 18, "E": 14, "F": 28, "G": 72})
 
     # Pengaturan dan fitur lanjutan
     ws = _sheet_title(wb, "Pengaturan")

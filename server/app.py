@@ -42,7 +42,15 @@ from farm_profile import (
     summarize_profile,
 )
 from farm_records import add_record, performance_flags, records_context, summarize_records
-from feed_formulation import LOCAL_FEED_INGREDIENTS, formula_feedback, simple_ruminant_ration
+from feed_formulation import (
+    LOCAL_FEED_INGREDIENTS,
+    feed_categories,
+    feed_catalog_rows,
+    feed_option_label,
+    feed_options_for_animal,
+    formula_feedback,
+    simple_ruminant_ration,
+)
 from health_triage import health_prompt_context, local_triage_summary, triage_level
 from decision_support import (
     BIOSECURITY_ITEMS,
@@ -1729,7 +1737,7 @@ def render_health_consultation(selected_model_id: str, selected_fallback_models:
 
 def render_feed_formulation() -> None:
     st.header("Formulasi Pakan")
-    st.caption("Hitung protein kasar estimasi, indeks energi relatif, dan biaya formula sederhana berbasis bahan lokal Indonesia.")
+    st.caption("Hitung protein kasar estimasi, indeks energi relatif, dan biaya formula sederhana berbasis bahan pakan yang umum digunakan di Indonesia.")
     p = normalise_profile(st.session_state.farm_profile)
 
     col1, col2, col3 = st.columns(3)
@@ -1738,10 +1746,23 @@ def render_feed_formulation() -> None:
     phase = col2.selectbox("Fase", phases, index=phases.index(p["phase"]) if p["phase"] in phases else 0, key="feed_phase")
     population = col3.number_input("Populasi", min_value=1, value=max(int(p.get("population", 1)), 1), step=1, key="feed_pop")
 
+    f1, f2 = st.columns([1, 1])
+    category_filter = f1.selectbox("Kategori bahan pakan", feed_categories(), key="feed_category_filter")
+    only_suitable = f2.toggle("Tampilkan yang sesuai komoditas", value=True, key="feed_only_suitable")
+
+    if only_suitable:
+        feed_options = feed_options_for_animal(animal, category_filter)
+    else:
+        feed_options = [row["Bahan"] for row in feed_catalog_rows(category=category_filter, only_suitable=False)]
+
+    valid_default = [x for x in st.session_state.formula_selected if x in feed_options]
+    st.caption(f"Tersedia {len(feed_options)} bahan pada filter ini dari total {len(LOCAL_FEED_INGREDIENTS)} bahan pakan.")
     selected = st.multiselect(
         "Pilih bahan pakan",
-        options=list(LOCAL_FEED_INGREDIENTS.keys()),
-        default=[x for x in st.session_state.formula_selected if x in LOCAL_FEED_INGREDIENTS],
+        options=feed_options,
+        default=valid_default,
+        format_func=feed_option_label,
+        help="Daftar ini mencakup hijauan, leguminosa, silase/fermentasi, sumber energi, protein nabati, protein hewani, konsentrat/pakan komersial, mineral, vitamin, dan aditif umum di Indonesia.",
     )
     st.session_state.formula_selected = selected
 
@@ -1750,11 +1771,11 @@ def render_feed_formulation() -> None:
         st.write("Masukkan komposisi dan harga bahan.")
         for name in selected:
             info = LOCAL_FEED_INGREDIENTS[name]
-            c1, c2, c3, c4 = st.columns([1.4, 1, 1, 1])
-            c1.markdown(f"**{name}**  \n{info['type']} | PK ±{info['protein']}%")
-            pct = c2.number_input("%", min_value=0.0, max_value=100.0, value=25.0 if name != "mineral mix" else 1.0, step=0.5, key=f"pct_{name}")
+            c1, c2, c3, c4 = st.columns([1.6, 0.8, 0.9, 1.2])
+            c1.markdown(f"**{name}**  \n{info['category']} | {info['type']} | PK ±{info['protein']}%")
+            pct = c2.number_input("%", min_value=0.0, max_value=100.0, value=25.0 if "mineral" not in str(info.get("type", "")).lower() and "premix" not in str(info.get("type", "")).lower() else 1.0, step=0.5, key=f"pct_{name}")
             price = c3.number_input("Rp/kg", min_value=0.0, value=0.0, step=100.0, key=f"price_{name}")
-            c4.caption("Input as-fed sederhana")
+            c4.caption(str(info.get("note", "Input as-fed sederhana")))
             ingredients.append({
                 "name": name,
                 "percent": pct,
@@ -1774,11 +1795,16 @@ def render_feed_formulation() -> None:
         forage_ratio = c2.slider("Rasio hijauan (%)", 40.0, 90.0, 70.0, 5.0)
         st.info(simple_ruminant_ration(animal, body_weight, population, forage_ratio))
 
-    with st.expander("Daftar bahan lokal bawaan"):
-        st.dataframe([
-            {"Bahan": k, "Jenis": v["type"], "Protein estimasi (%)": v["protein"], "Indeks energi": v["energy"]}
-            for k, v in LOCAL_FEED_INGREDIENTS.items()
-        ], width="stretch", hide_index=True)
+    with st.expander("Katalog bahan pakan Indonesia"):
+        catalog_filter = st.selectbox("Filter katalog", feed_categories(), key="feed_catalog_filter")
+        suitable_rows = feed_catalog_rows(animal, catalog_filter, only_suitable=True)
+        all_rows = feed_catalog_rows(category=catalog_filter, only_suitable=False)
+        tab_sesuai, tab_semua = st.tabs(["Sesuai komoditas", "Semua bahan"])
+        with tab_sesuai:
+            st.dataframe(suitable_rows, width="stretch", hide_index=True)
+        with tab_semua:
+            st.dataframe(all_rows, width="stretch", hide_index=True)
+        st.caption("Catatan: angka nutrisi bersifat estimasi edukatif. Untuk formula presisi, gunakan analisis proksimat/bahan kering dan evaluasi performa aktual.")
 
 
 def render_records() -> None:

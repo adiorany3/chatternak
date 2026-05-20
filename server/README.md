@@ -14,10 +14,11 @@ Persona utama aplikasi adalah **Pakar Ternak Nusantara**: konsultan peternakan p
 - Default model murah: `slashai/gpt-5-nano`.
 - Fallback bertingkat jika respons kosong, error, kepotong, atau tidak layak.
 - Panel teknis/API disembunyikan dalam **Admin Mode** dengan kunci dari Streamlit Secrets.
-- Chat history, profil farm, catatan performa, dan kalender manajemen dikirim sebagai konteks ke AI.
+- Chat history, profil farm, catatan performa, kasus kesehatan, kalender manajemen, dan insight lokal dikirim sebagai konteks ke AI.
 - Persona pakar peternakan kuat melalui `persona.py`.
 - Profil peternakan pengguna: komoditas, fase, populasi, bobot, pakan, kandang, masalah utama, biaya, target pasar.
-- Dashboard farm: ringkasan profil, checklist, jadwal terdekat, ADG, FCR, mortalitas, dan total pakan.
+- Dashboard farm: ringkasan profil, checklist, jadwal terdekat, ADG, FCR, mortalitas, total pakan, level risiko, dan insight cepat.
+- AI Insight Farm: scorecard risiko, prioritas aksi, anomali performa, efisiensi pakan/biaya, tindak lanjut kesehatan, agenda kalender, dan rekomendasi 24 jam/7 hari/30 hari.
 - Konsultasi kesehatan/triase: gejala, durasi, jumlah sakit, kematian, kondisi pakan-air, kandang/kolam, tanda bahaya, dan rekomendasi aman.
 - Formulasi pakan sederhana: bahan lokal, estimasi protein, indeks energi, biaya campuran, dan ransum awal ruminansia.
 - Catatan performa: bobot, pakan, biaya, mortalitas, telur, susu, catatan lapangan, ADG, FCR, ekspor JSON.
@@ -25,7 +26,7 @@ Persona utama aplikasi adalah **Pakar Ternak Nusantara**: konsultan peternakan p
 - Kalkulator pakan, prediksi pertumbuhan, dan analisis BEP.
 - Estimasi token dan biaya berdasarkan `usage` dari API.
 - Limit sederhana per sesi untuk menahan biaya.
-- Tombol reset chat, reset data farm khusus admin, dan ekspor data JSON.
+- Tombol reset chat, reset data farm khusus admin, ekspor data JSON, ekspor insight JSON, dan footer **Developed by Galuh Adi Insani**.
 
 ## Struktur file
 
@@ -41,12 +42,36 @@ health_triage.py          # Triase kesehatan dan tanda bahaya
 feed_formulation.py       # Formula pakan, bahan lokal, target protein sederhana
 farm_records.py           # Recording performa, ADG, FCR, mortalitas, produksi, biaya
 farm_calendar.py          # Kalender manajemen otomatis
+ai_insights.py            # Scorecard risiko, insight lokal, konteks AI insight engine
 model_catalog.py          # Daftar model, harga, estimasi biaya
 models.toml               # Katalog model dan harga per 1 juta token
 config.toml               # Konfigurasi umum tanpa API key
 .streamlit/secrets.toml.example
 requirements.txt
 ```
+
+
+## AI Insight Farm
+
+Mode **AI Insight** membaca seluruh data aplikasi yang tersedia:
+
+- profil peternakan,
+- catatan performa,
+- ADG dan FCR,
+- mortalitas,
+- konsumsi pakan,
+- biaya,
+- produksi telur/susu,
+- kasus kesehatan terakhir,
+- kalender manajemen,
+- jadwal terlewat dan jadwal 14 hari ke depan.
+
+Output insight dibagi menjadi dua lapis:
+
+1. **Insight lokal otomatis**: dibuat tanpa biaya API dari aturan deterministik.
+2. **Insight AI lengkap**: memakai model AI untuk menyusun kesimpulan eksekutif, temuan data, risiko prioritas, rekomendasi 24 jam, 7 hari, 30 hari, dan data yang perlu dicatat.
+
+AI tidak mengarang data yang belum ada; sistem membedakan fakta, asumsi, risiko, dan rekomendasi.
 
 ## Cara menjalankan lokal
 
@@ -150,3 +175,7 @@ Parser respons API mendukung:
 ## Catatan keselamatan
 
 Jawaban kesehatan hewan bersifat edukatif dan triase awal. Untuk gejala berat, kematian mendadak, outbreak, penyakit menular, kembung parah, tidak mau makan lebih dari 24 jam, atau penurunan produksi ekstrem, tetap hubungi dokter hewan/tenaga kesehatan hewan setempat.
+
+---
+
+Developed by Galuh Adi Insani

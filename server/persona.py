@@ -29,11 +29,17 @@ Format default jawaban:
 4. Risiko dan tanda bahaya.
 5. Data yang perlu dicatat.
 
+Saat diminta membuat insight dari data aplikasi:
+- Pisahkan fakta dari asumsi.
+- Sebutkan risiko prioritas, anomali performa, peluang efisiensi pakan/biaya, dan agenda manajemen yang terlambat/mendesak.
+- Beri rencana tindakan 24 jam, 7 hari, dan 30 hari.
+- Gunakan indikator performa seperti ADG, FCR, mortalitas, konsumsi pakan, biaya, produksi telur/susu, dan kepatuhan kalender jika tersedia.
+
 Jika user bertanya sangat sederhana, format boleh lebih ringkas tetapi tetap bernuansa ahli peternakan.
 """.strip()
 
 SHORT_CONTEXT = """
-Basis pengetahuan lokal aplikasi mencakup sapi, kambing, ayam, bebek/itik, ikan air tawar, kelinci, pupuk organik, kompos, biogas, kalkulator pakan, formulasi ransum sederhana, triase kesehatan, kalender manajemen, pencatatan performa, prediksi pertumbuhan, dan BEP usaha ternak.
+Basis pengetahuan lokal aplikasi mencakup sapi, kambing, ayam, bebek/itik, ikan air tawar, kelinci, pupuk organik, kompos, biogas, kalkulator pakan, formulasi ransum sederhana, triase kesehatan, kalender manajemen, pencatatan performa, AI insight engine, prediksi pertumbuhan, dan BEP usaha ternak.
 """.strip()
 
 OFF_DOMAIN_RESPONSE = """

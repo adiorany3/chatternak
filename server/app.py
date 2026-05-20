@@ -11,6 +11,13 @@ import numpy as np
 import streamlit as st
 
 from calculators import calculate_bep, calculate_feed_needs, predict_growth
+from ai_insights import (
+    build_ai_insight_context,
+    build_scorecard,
+    format_insights_markdown,
+    insight_prompt,
+    local_operational_insights,
+)
 from chat_router import answer_message
 from domain_data import ANIMAL_TYPES, DEFAULT_WEIGHTS, FEED_RATES
 from farm_calendar import generate_management_events
@@ -56,6 +63,7 @@ ADMIN_PLACEHOLDERS = {
 
 APP_MODES = [
     "Dashboard Farm",
+    "AI Insight",
     "Chat Pakar",
     "Profil Peternakan",
     "Konsultasi Kesehatan",
@@ -83,6 +91,7 @@ def init_state() -> None:
         "farm_records": [],
         "farm_calendar_events": [],
         "last_health_case": {},
+        "last_ai_insight": {},
         "formula_selected": ["rumput odot", "dedak", "ampas tahu", "mineral mix"],
     }
     for key, value in defaults.items():
@@ -141,6 +150,7 @@ def export_app_json() -> str:
         "records": st.session_state.farm_records,
         "calendar_events": st.session_state.farm_calendar_events,
         "last_health_case": st.session_state.last_health_case,
+        "last_ai_insight": st.session_state.last_ai_insight,
         "usage": {
             "requests": st.session_state.session_request_count,
             "prompt_tokens": st.session_state.session_prompt_tokens,
@@ -384,12 +394,19 @@ def render_dashboard() -> None:
     completeness = profile_completeness(profile)
 
     st.header("Dashboard Farm")
-    col1, col2, col3, col4 = st.columns(4)
+    scorecard = build_scorecard(profile, st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case)
+    insights = local_operational_insights(profile, st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Kelengkapan Profil", f"{completeness}%")
     col2.metric("Populasi", f"{profile['population']} ekor")
     col3.metric("Bobot Rata-rata", f"{profile['average_weight_kg']:.2f} kg")
     col4.metric("Catatan Performa", summary["count"])
+    col5.metric("Risiko", scorecard["risk_level"])
     st.progress(completeness / 100)
+
+    with st.expander("Insight cepat dari data farm", expanded=True):
+        st.markdown(format_insights_markdown(insights, limit=4))
+        st.caption("Insight cepat dibuat dari data lokal. Untuk analisis lebih lengkap, buka mode AI Insight.")
 
     left, right = st.columns([1.1, 1])
     with left:
@@ -421,6 +438,80 @@ def render_dashboard() -> None:
     c2.metric("FCR", "-" if summary["fcr"] is None else f"{summary['fcr']:.2f}")
     c3.metric("Mortalitas", f"{summary['mortality_total']} ekor")
     c4.metric("Total Pakan", f"{summary['feed_total']:.2f} kg")
+
+
+
+def render_ai_insights(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.header("AI Insight Farm")
+    st.caption("Membaca profil, recording, kesehatan, kalender, dan biaya untuk menghasilkan insight operasional yang bisa ditindaklanjuti.")
+
+    profile = normalise_profile(st.session_state.farm_profile)
+    records = st.session_state.farm_records
+    calendar_events = st.session_state.farm_calendar_events
+    health_case = st.session_state.last_health_case
+    scorecard = build_scorecard(profile, records, calendar_events, health_case)
+    insights = local_operational_insights(profile, records, calendar_events, health_case)
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Risiko", scorecard["risk_level"])
+    c2.metric("Kelengkapan Profil", f"{scorecard['profile_completeness']}%")
+    c3.metric("Recording", scorecard["records_count"])
+    c4.metric("Jadwal 14 Hari", scorecard["calendar_upcoming_14d"])
+    c5.metric("Jadwal Terlewat", scorecard["calendar_overdue"])
+
+    st.subheader("Insight Lokal Otomatis")
+    st.markdown(format_insights_markdown(insights))
+
+    with st.expander("Scorecard data yang dibaca sistem"):
+        st.json(scorecard)
+
+    col_a, col_b = st.columns([1, 1])
+    with col_a:
+        generate = st.button("Buat Insight AI Lengkap", use_container_width=True)
+    with col_b:
+        export_payload = {
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "scorecard": scorecard,
+            "local_insights": insights,
+            "last_ai_insight": st.session_state.last_ai_insight,
+        }
+        st.download_button(
+            "Download Insight JSON",
+            data=json.dumps(export_payload, ensure_ascii=False, indent=2),
+            file_name="ai-insight-pakar-ternak.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    if generate:
+        if usage_limit_reached():
+            st.warning("Batas pemakaian sesi sudah tercapai. Reset sesi atau minta admin menaikkan batas.")
+        else:
+            with st.spinner("AI sedang menyusun insight manajemen farm..."):
+                response, meta = run_ai_consultation(
+                    insight_prompt(),
+                    selected_model_id,
+                    selected_fallback_models,
+                    selected_temperature,
+                    max_history_messages,
+                    prefer_ai,
+                    extra_context=build_ai_insight_context(profile, records, calendar_events, health_case),
+                )
+            st.session_state.last_ai_insight = {
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+                "content": response,
+                "meta": meta,
+                "scorecard": scorecard,
+            }
+            update_usage(meta)
+            st.subheader("Insight AI Lengkap")
+            st.markdown(response)
+            render_ai_trace(meta)
+
+    elif st.session_state.last_ai_insight:
+        st.subheader("Insight AI Terakhir")
+        st.caption(f"Dibuat: {st.session_state.last_ai_insight.get('generated_at', '-')}")
+        st.markdown(st.session_state.last_ai_insight.get("content", ""))
 
 
 def render_profile() -> None:
@@ -780,6 +871,15 @@ def render_bep() -> None:
             st.pyplot(plot_bep(fixed_cost, price_per_unit, variable_cost_per_unit, bep_units, bep_revenue))
 
 
+
+def render_footer() -> None:
+    st.markdown("---")
+    st.markdown(
+        "<div style='text-align:center; color: #6b7280; font-size: 0.9rem;'>Developed by Galuh Adi Insani</div>",
+        unsafe_allow_html=True,
+    )
+
+
 init_state()
 
 model_ids = [model["id"] for model in model_catalog]
@@ -838,6 +938,8 @@ with st.sidebar:
 
 if tool_option == "Dashboard Farm":
     render_dashboard()
+elif tool_option == "AI Insight":
+    render_ai_insights(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Chat Pakar":
     render_chat(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Profil Peternakan":
@@ -856,3 +958,5 @@ elif tool_option == "Prediksi Pertumbuhan":
     render_growth_prediction()
 elif tool_option == "Analisis BEP":
     render_bep()
+
+render_footer()

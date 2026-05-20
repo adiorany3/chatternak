@@ -2457,14 +2457,21 @@ def render_database_supabase_page() -> None:
 
     with st.expander("SQL tabel Supabase jika ingin dibuat manual", expanded=False):
         st.code(
-            """CREATE TABLE IF NOT EXISTS ai_pakar_ternak_sessions (
+            """-- Skema baru yang dipakai aplikasi.
+CREATE TABLE IF NOT EXISTS ai_pakar_ternak_sessions (
     session_id TEXT PRIMARY KEY,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    payload JSONB NOT NULL
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_pakar_ternak_sessions_updated_at
-ON ai_pakar_ternak_sessions (updated_at DESC);""".strip(),
+ON ai_pakar_ternak_sessions (updated_at DESC);
+
+-- Jika Anda sudah pernah membuat tabel versi lama, jalankan migrasi ini sekali:
+ALTER TABLE ai_pakar_ternak_sessions ADD COLUMN IF NOT EXISTS session_id TEXT;
+ALTER TABLE ai_pakar_ternak_sessions ADD COLUMN IF NOT EXISTS payload JSONB;
+UPDATE ai_pakar_ternak_sessions SET session_id = session_key WHERE session_id IS NULL AND session_key IS NOT NULL;
+UPDATE ai_pakar_ternak_sessions SET payload = data WHERE payload IS NULL AND data IS NOT NULL;""".strip(),
             language="sql",
         )
 

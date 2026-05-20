@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Set
 import json
 import os
 import re
@@ -69,16 +69,27 @@ def _has_postgres_config(cfg: Dict[str, str]) -> bool:
     return all(cfg.get(item) for item in required)
 
 
-def _safe_table_name(table: str) -> str:
+def _table_parts(table: str) -> Tuple[str, str]:
     table = table or "ai_pakar_ternak_sessions"
-    # Allow optional schema.table, but validate each identifier strictly.
     parts = table.split(".")
-    if not 1 <= len(parts) <= 2:
+    if len(parts) == 1:
+        schema, name = "public", parts[0]
+    elif len(parts) == 2:
+        schema, name = parts[0], parts[1]
+    else:
         raise ValueError("Nama tabel database tidak valid.")
-    for part in parts:
+    for part in (schema, name):
         if not _IDENTIFIER_RE.match(part):
             raise ValueError("Nama tabel database hanya boleh huruf, angka, dan underscore; diawali huruf/underscore.")
-    return ".".join(f'"{part}"' for part in parts)
+    return schema, name
+
+
+def _safe_table_name(table: str) -> str:
+    schema, name = _table_parts(table)
+    # Keep old behavior: if user supplied no schema, render only the table name.
+    if "." in (table or ""):
+        return f'"{schema}"."{name}"'
+    return f'"{name}"'
 
 
 def get_storage_config(secrets: Any = None) -> Dict[str, str]:
@@ -145,19 +156,93 @@ def _connect_postgres(cfg: Dict[str, str]):
     return psycopg2.connect(_postgres_dsn(cfg), connect_timeout=15)
 
 
-def _ensure_postgres_table(conn: Any, table: str) -> None:
-    safe_table = _safe_table_name(table)
+def _get_postgres_columns(conn: Any, table: str) -> Set[str]:
+    schema, name = _table_parts(table)
     with conn.cursor() as cur:
         cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {safe_table} (
-                session_id text PRIMARY KEY,
-                updated_at timestamptz NOT NULL DEFAULT now(),
-                payload jsonb NOT NULL
-            )
             """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+            """,
+            (schema, name),
         )
-    conn.commit()
+        return {str(row[0]) for row in cur.fetchall()}
+
+
+def _postgres_table_exists(conn: Any, table: str) -> bool:
+    schema, name = _table_parts(table)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+            )
+            """,
+            (schema, name),
+        )
+        return bool(cur.fetchone()[0])
+
+
+def _ensure_postgres_table(conn: Any, table: str) -> None:
+    """Create a new table when absent, and keep old tables compatible when present.
+
+    Supported schemas:
+    - New schema: session_id, payload, updated_at
+    - Old schema: session_key, data, updated_at, optional user_label
+
+    If the database user has ALTER permission, old tables are upgraded by adding
+    session_id and payload columns while keeping the old columns. If ALTER is not
+    allowed, the read/write functions still fall back to session_key/data.
+    """
+    safe_table = _safe_table_name(table)
+    if not _postgres_table_exists(conn, table):
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {safe_table} (
+                    session_id text PRIMARY KEY,
+                    updated_at timestamptz NOT NULL DEFAULT now(),
+                    payload jsonb NOT NULL DEFAULT '{{}}'::jsonb
+                )
+                """
+            )
+        conn.commit()
+        return
+
+    columns = _get_postgres_columns(conn, table)
+    # Best-effort migration for databases that were created using the earlier SQL.
+    try:
+        with conn.cursor() as cur:
+            if "payload" not in columns and "data" in columns:
+                cur.execute(f"ALTER TABLE {safe_table} ADD COLUMN IF NOT EXISTS payload jsonb")
+                cur.execute(f"UPDATE {safe_table} SET payload = data WHERE payload IS NULL")
+            if "session_id" not in columns and "session_key" in columns:
+                cur.execute(f"ALTER TABLE {safe_table} ADD COLUMN IF NOT EXISTS session_id text")
+                cur.execute(f"UPDATE {safe_table} SET session_id = session_key WHERE session_id IS NULL")
+            if "updated_at" not in columns:
+                cur.execute(f"ALTER TABLE {safe_table} ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()")
+        conn.commit()
+    except Exception:
+        # Roll back and continue with old schema compatibility.
+        conn.rollback()
+
+
+def _postgres_schema_mode(conn: Any, table: str) -> Tuple[str, str, Set[str]]:
+    columns = _get_postgres_columns(conn, table)
+    # Prefer the old session_key/data path when those columns exist because older
+    # tables usually have UNIQUE(session_key), while a best-effort added
+    # session_id column may not yet have a unique constraint.
+    if "session_key" in columns and "data" in columns:
+        return "session_key", "data", columns
+    if "session_id" in columns and "payload" in columns:
+        return "session_id", "payload", columns
+    raise RuntimeError(
+        "Struktur tabel Supabase belum sesuai. Buat kolom session_id+payload atau session_key+data. "
+        "Lihat contoh SQL di menu Database Supabase."
+    )
 
 
 def save_local(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -184,12 +269,13 @@ def save_supabase_rest(payload: Dict[str, Any], cfg: Dict[str, str]) -> Dict[str
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates,return=representation",
     }
-    body = {
-        "session_id": session_id,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "payload": payload,
-    }
+
+    # Prefer new REST schema; if Supabase returns a column error, try old schema.
+    body = {"session_id": session_id, "updated_at": datetime.now().isoformat(timespec="seconds"), "payload": payload}
     response = requests.post(url, headers=headers, json=body, timeout=25)
+    if response.status_code >= 300 and ("payload" in response.text or "session_id" in response.text):
+        body = {"session_key": session_id, "updated_at": datetime.now().isoformat(timespec="seconds"), "data": payload}
+        response = requests.post(url, headers=headers, json=body, timeout=25)
     if response.status_code >= 300:
         raise RuntimeError(f"Supabase REST status {response.status_code}: {response.text[:300]}")
     return {"ok": True, "provider": "supabase", "mode": "supabase_rest", "message": "Payload berhasil disimpan ke Supabase REST.", "synced_at": datetime.now().isoformat(timespec="seconds")}
@@ -198,15 +284,20 @@ def save_supabase_rest(payload: Dict[str, Any], cfg: Dict[str, str]) -> Dict[str
 def load_supabase_rest(session_id: str, cfg: Dict[str, str]) -> Tuple[bool, Dict[str, Any], str]:
     if not session_id:
         return False, {}, "Session ID kosong."
-    url = f"{cfg['supabase_url']}/rest/v1/{cfg['table']}?session_id=eq.{session_id}&select=payload&limit=1"
     headers = {"apikey": cfg["supabase_key"], "Authorization": f"Bearer {cfg['supabase_key']}"}
+
+    url = f"{cfg['supabase_url']}/rest/v1/{cfg['table']}?session_id=eq.{session_id}&select=payload&limit=1"
     response = requests.get(url, headers=headers, timeout=25)
+    if response.status_code >= 300 and ("payload" in response.text or "session_id" in response.text):
+        url = f"{cfg['supabase_url']}/rest/v1/{cfg['table']}?session_key=eq.{session_id}&select=data&limit=1"
+        response = requests.get(url, headers=headers, timeout=25)
     if response.status_code >= 300:
         return False, {}, f"Supabase REST status {response.status_code}: {response.text[:300]}"
     rows = response.json() or []
     if not rows:
         return False, {}, "Session ID tidak ditemukan di Supabase."
-    return True, rows[0].get("payload") or {}, "Payload berhasil dimuat dari Supabase REST."
+    row = rows[0]
+    return True, row.get("payload") or row.get("data") or {}, "Payload berhasil dimuat dari Supabase REST."
 
 
 # Backward-compatible aliases used by older code/docs.
@@ -225,18 +316,32 @@ def save_postgres(payload: Dict[str, Any], cfg: Dict[str, str]) -> Dict[str, Any
 
     with _connect_postgres(cfg) as conn:
         _ensure_postgres_table(conn, table)
+        key_col, payload_col, columns = _postgres_schema_mode(conn, table)
+        set_updated = "updated_at = EXCLUDED.updated_at, " if "updated_at" in columns else ""
+        updated_insert_cols = ", updated_at" if "updated_at" in columns else ""
+        updated_values = ", now()" if "updated_at" in columns else ""
+        user_label_cols = ", user_label" if "user_label" in columns else ""
+        user_label_values = ", %s" if "user_label" in columns else ""
+        user_label_update = ", user_label = EXCLUDED.user_label" if "user_label" in columns else ""
+        user_label = str((payload.get("profile") or {}).get("farm_name") or payload.get("app") or "AI Pakar Ternak")
+
+        params = [session_id]
+        if "user_label" in columns:
+            params.append(user_label)
+        params.append(Json(payload))
+
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                INSERT INTO {safe_table} (session_id, updated_at, payload)
-                VALUES (%s, now(), %s)
-                ON CONFLICT (session_id)
-                DO UPDATE SET updated_at = EXCLUDED.updated_at, payload = EXCLUDED.payload
+                INSERT INTO {safe_table} ({key_col}{user_label_cols}{updated_insert_cols}, {payload_col})
+                VALUES (%s{user_label_values}{updated_values}, %s)
+                ON CONFLICT ({key_col})
+                DO UPDATE SET {set_updated}{payload_col} = EXCLUDED.{payload_col}{user_label_update}
                 """,
-                (session_id, Json(payload)),
+                tuple(params),
             )
         conn.commit()
-    return {"ok": True, "provider": "supabase", "mode": "postgres", "message": "Payload berhasil disimpan ke Supabase PostgreSQL.", "session_id": session_id, "synced_at": datetime.now().isoformat(timespec="seconds")}
+    return {"ok": True, "provider": "supabase", "mode": "postgres", "schema": f"{key_col}/{payload_col}", "message": "Payload berhasil disimpan ke Supabase PostgreSQL.", "session_id": session_id, "synced_at": datetime.now().isoformat(timespec="seconds")}
 
 
 def load_postgres(session_id: str, cfg: Dict[str, str]) -> Tuple[bool, Dict[str, Any], str]:
@@ -246,15 +351,16 @@ def load_postgres(session_id: str, cfg: Dict[str, str]) -> Tuple[bool, Dict[str,
     safe_table = _safe_table_name(table)
     with _connect_postgres(cfg) as conn:
         _ensure_postgres_table(conn, table)
+        key_col, payload_col, _columns = _postgres_schema_mode(conn, table)
         with conn.cursor() as cur:
-            cur.execute(f"SELECT payload FROM {safe_table} WHERE session_id = %s LIMIT 1", (session_id,))
+            cur.execute(f"SELECT {payload_col} FROM {safe_table} WHERE {key_col} = %s LIMIT 1", (session_id,))
             row = cur.fetchone()
     if not row:
         return False, {}, "Session ID tidak ditemukan di Supabase PostgreSQL."
     payload = row[0]
     if isinstance(payload, str):
         payload = json.loads(payload)
-    return True, payload or {}, "Payload berhasil dimuat dari Supabase PostgreSQL."
+    return True, payload or {}, f"Payload berhasil dimuat dari Supabase PostgreSQL ({key_col}/{payload_col})."
 
 
 def test_connection(secrets: Any = None) -> Dict[str, Any]:
@@ -264,14 +370,19 @@ def test_connection(secrets: Any = None) -> Dict[str, Any]:
     if cfg.get("mode") == "postgres":
         with _connect_postgres(cfg) as conn:
             _ensure_postgres_table(conn, cfg.get("table", "ai_pakar_ternak_sessions"))
+            key_col, payload_col, columns = _postgres_schema_mode(conn, cfg.get("table", "ai_pakar_ternak_sessions"))
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
                 cur.fetchone()
-        return {"ok": True, "provider": "supabase", "mode": "postgres", "message": "Koneksi Supabase PostgreSQL berhasil."}
+        return {"ok": True, "provider": "supabase", "mode": "postgres", "schema": f"{key_col}/{payload_col}", "columns": sorted(columns), "message": f"Koneksi Supabase PostgreSQL berhasil. Skema aktif: {key_col}/{payload_col}."}
     if cfg.get("mode") == "supabase_rest":
         url = f"{cfg['supabase_url']}/rest/v1/{cfg['table']}?select=session_id&limit=1"
         headers = {"apikey": cfg["supabase_key"], "Authorization": f"Bearer {cfg['supabase_key']}"}
         response = requests.get(url, headers=headers, timeout=20)
+        if response.status_code >= 300:
+            # Try old schema select before declaring failure.
+            url = f"{cfg['supabase_url']}/rest/v1/{cfg['table']}?select=session_key&limit=1"
+            response = requests.get(url, headers=headers, timeout=20)
         if response.status_code >= 300:
             return {"ok": False, "provider": "supabase", "mode": "supabase_rest", "message": f"Supabase REST status {response.status_code}: {response.text[:250]}"}
         return {"ok": True, "provider": "supabase", "mode": "supabase_rest", "message": "Koneksi Supabase REST berhasil."}

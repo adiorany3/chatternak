@@ -10,6 +10,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from urllib.parse import quote
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -2475,23 +2476,114 @@ UPDATE ai_pakar_ternak_sessions SET payload = data WHERE payload IS NULL AND dat
             language="sql",
         )
 
+def _normalise_whatsapp_number(value: str) -> str:
+    """Return a WhatsApp-ready international phone number without symbols."""
+    raw = "".join(ch for ch in str(value or "") if ch.isdigit())
+    if raw.startswith("0"):
+        raw = "62" + raw[1:]
+    return raw
+
+
+def _build_email_url(email: str, subject: str, body: str) -> str:
+    return f"mailto:{email.strip()}?subject={quote(subject)}&body={quote(body)}"
+
+
+def _build_whatsapp_url(phone: str, body: str) -> str:
+    number = _normalise_whatsapp_number(phone)
+    if number:
+        return f"https://wa.me/{number}?text={quote(body)}"
+    return f"https://wa.me/?text={quote(body)}"
+
+
+def _render_external_action_button(label: str, url: str, help_text: str | None = None) -> None:
+    """Render link-style action safely across Streamlit versions."""
+    if hasattr(st, "link_button"):
+        st.link_button(label, url, width="stretch", help=help_text)
+    else:
+        st.markdown(f"[{label}]({url})")
+
+
 def render_notification_center() -> None:
-    st.subheader("Notifikasi WhatsApp/Telegram - Template")
-    st.caption("Aplikasi belum mengirim otomatis, tetapi menyiapkan teks siap salin. Integrasi webhook bisa ditambahkan dari database/automation perusahaan.")
-    summary = executive_summary(normalise_profile(st.session_state.farm_profile), st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case, st.session_state.biosecurity_checked, _enterprise_state())
-    for msg in notification_messages(summary):
-        st.code(msg, language="text")
+    st.subheader("Notifikasi Email & WhatsApp")
+    st.caption("Klik tombol Email atau WhatsApp untuk membuka aplikasi yang tersedia di perangkat pengguna dengan pesan yang sudah terisi otomatis.")
+
+    summary = executive_summary(
+        normalise_profile(st.session_state.farm_profile),
+        st.session_state.farm_records,
+        st.session_state.farm_calendar_events,
+        st.session_state.last_health_case,
+        st.session_state.biosecurity_checked,
+        _enterprise_state(),
+    )
+    messages = notification_messages(summary)
+    default_subject = "Laporan / Peringatan AI Pakar Ternak"
+    default_body = "AI Pakar Ternak - Ringkasan Notifikasi\n\n" + "\n".join(f"- {msg}" for msg in messages)
+
+    with st.expander("Preview pesan yang akan dikirim", expanded=True):
+        st.text_area("Isi pesan", value=default_body, height=180, key="notification_message_body")
+        st.text_input("Subjek email", value=default_subject, key="notification_email_subject")
+
     state = _enterprise_state()
     with st.form("notif_contacts"):
-        contact = st.text_input("Kontak penerima / grup", placeholder="Manager Farm A / Grup WA Kandang 1")
-        channel = st.selectbox("Channel", ["WhatsApp", "Telegram", "Email", "Manual"])
+        st.markdown("**Tambah kontak penerima**")
+        contact_name = st.text_input("Nama kontak / unit", placeholder="Manager Farm A / Grup Kandang 1")
+        col_email, col_wa = st.columns(2)
+        with col_email:
+            email = st.text_input("Email", placeholder="nama@perusahaan.com")
+        with col_wa:
+            whatsapp = st.text_input("WhatsApp", placeholder="62812xxxxxxx atau 0812xxxxxxx")
         if st.form_submit_button("Simpan Kontak", width="stretch"):
-            if contact.strip():
-                state.setdefault("notification_contacts", []).append({"contact": contact, "channel": channel})
-                _save_enterprise_state(state, "Tambah kontak notifikasi", f"{channel}: {contact}")
+            if contact_name.strip() or email.strip() or whatsapp.strip():
+                state.setdefault("notification_contacts", []).append({
+                    "name": contact_name.strip() or "Kontak",
+                    "email": email.strip(),
+                    "whatsapp": whatsapp.strip(),
+                    "channel": "Email/WhatsApp",
+                })
+                _save_enterprise_state(state, "Tambah kontak notifikasi", contact_name.strip() or email.strip() or whatsapp.strip())
                 st.success("Kontak notifikasi disimpan.")
-    if state.get("notification_contacts"):
-        st.dataframe(state["notification_contacts"], width="stretch", hide_index=True)
+            else:
+                st.warning("Isi minimal nama, email, atau nomor WhatsApp.")
+
+    contacts = state.get("notification_contacts", [])
+    if contacts:
+        st.markdown("### Kontak tersimpan")
+        body = st.session_state.get("notification_message_body", default_body)
+        subject = st.session_state.get("notification_email_subject", default_subject)
+        for idx, item in enumerate(contacts):
+            name = item.get("name") or item.get("contact") or f"Kontak {idx + 1}"
+            email = item.get("email") or (item.get("contact") if str(item.get("channel", "")).lower() == "email" and "@" in str(item.get("contact", "")) else "")
+            whatsapp = item.get("whatsapp") or (item.get("contact") if str(item.get("channel", "")).lower() == "whatsapp" else "")
+            with st.container(border=True):
+                st.markdown(f"**{name}**")
+                meta = []
+                if email:
+                    meta.append(f"Email: `{email}`")
+                if whatsapp:
+                    meta.append(f"WhatsApp: `{whatsapp}`")
+                if meta:
+                    st.caption(" | ".join(meta))
+                else:
+                    st.caption("Kontak lama belum memiliki email/nomor WhatsApp. Edit dengan menambahkan kontak baru.")
+                c1, c2, c3 = st.columns([1, 1, 1])
+                with c1:
+                    if email:
+                        _render_external_action_button("Kirim Email", _build_email_url(email, subject, body), "Membuka aplikasi email default.")
+                    else:
+                        st.button("Kirim Email", disabled=True, key=f"email_disabled_{idx}", width="stretch")
+                with c2:
+                    if whatsapp:
+                        _render_external_action_button("Kirim WhatsApp", _build_whatsapp_url(whatsapp, body), "Membuka WhatsApp/Web WhatsApp.")
+                    else:
+                        st.button("Kirim WhatsApp", disabled=True, key=f"wa_disabled_{idx}", width="stretch")
+                with c3:
+                    if st.button("Hapus Kontak", key=f"delete_notif_contact_{idx}", width="stretch"):
+                        contacts.pop(idx)
+                        state["notification_contacts"] = contacts
+                        _save_enterprise_state(state, "Hapus kontak notifikasi", name)
+                        st.rerun()
+    else:
+        st.info("Belum ada kontak. Tambahkan email dan/atau nomor WhatsApp penerima terlebih dahulu.")
 
 
 def render_audit_trail_center() -> None:

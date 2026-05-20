@@ -271,7 +271,7 @@ Fitur tambahan:
 - **Knowledge Base / RAG ringan**: admin dapat menambahkan SOP, standar perusahaan, atau catatan teknis yang ikut masuk Memory Ahli dan Backup XLSX.
 - **Hilirisasi / Teknologi Hasil**: checklist mutu daging, susu, telur, dan ikan konsumsi sesuai tujuan pemeliharaan.
 - **Database permanen opsional**: mendukung local temp save, Supabase PostgreSQL via `DATABASE_URL`/host, dan Supabase REST legacy jika dikonfigurasi melalui Secrets.
-- **Template notifikasi**: pesan siap salin untuk WhatsApp/Telegram/Email berdasarkan early warning.
+- **Aksi notifikasi langsung**: tombol Email (`mailto:`) dan WhatsApp (`wa.me`) membuka aplikasi yang tersedia di perangkat pengguna dengan pesan early warning yang sudah terisi otomatis.
 - **Audit trail**: mencatat perubahan data penting, input harian, transaksi, knowledge base, dan sinkronisasi database.
 
 Menu baru di sidebar:

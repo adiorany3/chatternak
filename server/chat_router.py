@@ -6,9 +6,12 @@ import random
 
 from calculators import detect_tool_response
 from domain_data import DOMAIN_TERMS, FARMING_KNOWLEDGE, INTENTS
-from persona import SHORT_CONTEXT, SYSTEM_PROMPT
+from persona import SHORT_CONTEXT, SYSTEM_PROMPT, OFF_DOMAIN_RESPONSE
 from openai_integration import OpenAIChatAPI
 from model_catalog import estimate_cost_rp
+from farm_profile import make_profile_context
+from farm_records import records_context
+from farm_calendar import calendar_context
 
 
 def is_domain_related(message: str) -> bool:
@@ -59,11 +62,27 @@ def get_utility_response(message: str) -> str | None:
     return None
 
 
-def build_messages(user_message: str, history: List[Dict[str, str]], max_history_messages: int = 16) -> List[Dict[str, str]]:
+def build_messages(
+    user_message: str,
+    history: List[Dict[str, str]],
+    max_history_messages: int = 16,
+    profile: Dict[str, Any] | None = None,
+    records: List[Dict[str, Any]] | None = None,
+    calendar_events: List[Dict[str, Any]] | None = None,
+    extra_context: str = "",
+) -> List[Dict[str, str]]:
     messages: List[Dict[str, str]] = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "system", "content": SHORT_CONTEXT},
     ]
+    if profile:
+        messages.append({"role": "system", "content": make_profile_context(profile)})
+    if records is not None:
+        messages.append({"role": "system", "content": records_context(records)})
+    if calendar_events is not None:
+        messages.append({"role": "system", "content": calendar_context(calendar_events)})
+    if extra_context.strip():
+        messages.append({"role": "system", "content": extra_context.strip()})
     cleaned_history = [
         {"role": item.get("role", "user"), "content": str(item.get("content", ""))}
         for item in history[-max_history_messages:]
@@ -84,6 +103,10 @@ def answer_message(
     max_history_messages: int,
     models_catalog: List[Dict[str, Any]],
     prefer_ai: bool = True,
+    profile: Dict[str, Any] | None = None,
+    records: List[Dict[str, Any]] | None = None,
+    calendar_events: List[Dict[str, Any]] | None = None,
+    extra_context: str = "",
 ) -> Tuple[str, Dict[str, Any]]:
     """Router utama chat.
 
@@ -109,7 +132,15 @@ def answer_message(
 
     should_use_ai = prefer_ai and client.is_configured
     if should_use_ai:
-        messages = build_messages(message, history, max_history_messages=max_history_messages)
+        messages = build_messages(
+            message,
+            history,
+            max_history_messages=max_history_messages,
+            profile=profile,
+            records=records,
+            calendar_events=calendar_events,
+            extra_context=extra_context,
+        )
         result = client.generate_chat_completion_with_fallback(
             messages=messages,
             temperature=temperature,
@@ -146,6 +177,9 @@ def answer_message(
             "Silakan tanya tentang sapi, kambing, ayam, bebek, ikan, kelinci, pakan, kandang, penyakit, reproduksi, pupuk, atau analisis usaha.",
             meta,
         )
+
+    if not is_domain_related(message):
+        return OFF_DOMAIN_RESPONSE, meta
 
     return (
         "Pertanyaan belum cukup jelas untuk saya jawab sebagai konsultan peternakan. "

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -12,6 +13,21 @@ import streamlit as st
 from calculators import calculate_bep, calculate_feed_needs, predict_growth
 from chat_router import answer_message
 from domain_data import ANIMAL_TYPES, DEFAULT_WEIGHTS, FEED_RATES
+from farm_calendar import generate_management_events
+from farm_profile import (
+    ANIMAL_PHASES,
+    DEFAULT_PROFILE,
+    PRODUCTION_GOALS,
+    breeding_dates,
+    normalise_profile,
+    phase_guidance,
+    profile_completeness,
+    quick_management_checklist,
+    summarize_profile,
+)
+from farm_records import add_record, performance_flags, records_context, summarize_records
+from feed_formulation import LOCAL_FEED_INGREDIENTS, formula_feedback, simple_ruminant_ration
+from health_triage import health_prompt_context, local_triage_summary, triage_level
 from model_catalog import format_model_option, format_rupiah, get_model_by_id, load_model_catalog
 from openai_integration import DEFAULT_CONFIG, OpenAIChatAPI
 
@@ -20,7 +36,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 st.set_page_config(
     page_title="Pakar Ternak Nusantara",
     page_icon="🐄",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded",
 )
 
@@ -38,9 +54,22 @@ ADMIN_PLACEHOLDERS = {
     "ADMIN_PASSWORD_HERE",
 }
 
+APP_MODES = [
+    "Dashboard Farm",
+    "Chat Pakar",
+    "Profil Peternakan",
+    "Konsultasi Kesehatan",
+    "Formulasi Pakan",
+    "Catatan Performa",
+    "Kalender Manajemen",
+    "Kalkulator Pakan",
+    "Prediksi Pertumbuhan",
+    "Analisis BEP",
+]
+
 
 def init_state() -> None:
-    defaults = {
+    defaults: Dict[str, Any] = {
         "messages": [],
         "last_meta": {},
         "session_request_count": 0,
@@ -50,6 +79,11 @@ def init_state() -> None:
         "session_estimated_cost_rp": 0.0,
         "admin_authenticated": False,
         "admin_login_error": "",
+        "farm_profile": dict(DEFAULT_PROFILE),
+        "farm_records": [],
+        "farm_calendar_events": [],
+        "last_health_case": {},
+        "formula_selected": ["rumput odot", "dedak", "ampas tahu", "mineral mix"],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -64,6 +98,13 @@ def reset_chat() -> None:
     st.session_state.session_completion_tokens = 0
     st.session_state.session_total_tokens = 0
     st.session_state.session_estimated_cost_rp = 0.0
+
+
+def reset_farm_data() -> None:
+    st.session_state.farm_profile = dict(DEFAULT_PROFILE)
+    st.session_state.farm_records = []
+    st.session_state.farm_calendar_events = []
+    st.session_state.last_health_case = {}
 
 
 def update_usage(meta: Dict[str, Any]) -> None:
@@ -91,10 +132,15 @@ def usage_limit_reached() -> bool:
     )
 
 
-def export_chat_json() -> str:
+def export_app_json() -> str:
     payload = {
         "app": "Pakar Ternak Nusantara",
+        "exported_at": datetime.now().isoformat(timespec="seconds"),
+        "profile": normalise_profile(st.session_state.farm_profile),
         "messages": st.session_state.messages,
+        "records": st.session_state.farm_records,
+        "calendar_events": st.session_state.farm_calendar_events,
+        "last_health_case": st.session_state.last_health_case,
         "usage": {
             "requests": st.session_state.session_request_count,
             "prompt_tokens": st.session_state.session_prompt_tokens,
@@ -123,12 +169,6 @@ def safe_dict(value: Any) -> Dict[str, Any]:
 
 
 def get_admin_password() -> Tuple[str, str]:
-    """Ambil kunci admin dari environment variable atau Streamlit Secrets.
-
-    Prioritas:
-    1. ADMIN_PASSWORD / STREAMLIT_ADMIN_PASSWORD dari environment.
-    2. [admin] password / key / passcode dari Streamlit Secrets.
-    """
     env_password = (os.getenv("ADMIN_PASSWORD") or os.getenv("STREAMLIT_ADMIN_PASSWORD") or "").strip()
     if env_password and env_password not in ADMIN_PLACEHOLDERS:
         return env_password, "Environment variable"
@@ -142,11 +182,6 @@ def get_admin_password() -> Tuple[str, str]:
     except Exception:
         pass
     return "", "Belum dikonfigurasi"
-
-
-def admin_is_configured() -> bool:
-    password, _ = get_admin_password()
-    return bool(password)
 
 
 def check_admin_password(candidate: str) -> bool:
@@ -190,7 +225,6 @@ def render_admin_panel(
     fallback_defaults: List[str],
     max_history_messages_default: int,
 ) -> Tuple[str, List[str], float, bool, int]:
-    """Render panel admin dan kembalikan konfigurasi runtime untuk chat."""
     selected_model_id = default_model
     selected_fallback_models = fallback_defaults
     selected_temperature = float(client.temperature)
@@ -198,7 +232,7 @@ def render_admin_panel(
     max_history_messages = max_history_messages_default
 
     st.divider()
-    st.subheader("Admin")
+    st.subheader("Admin Mode")
 
     password, password_source = get_admin_password()
     if not password:
@@ -241,10 +275,7 @@ def render_admin_panel(
         options=model_ids,
         index=model_ids.index(default_model),
         format_func=lambda model_id: format_model_option(get_model_by_id(model_id, model_catalog)),
-        help=(
-            "Setiap pertanyaan selalu mulai dari model awal ini. Jika gagal, "
-            "sistem naik ke fallback lalu kembali lagi ke model awal pada pertanyaan berikutnya."
-        ),
+        help="Setiap pertanyaan selalu mulai dari model awal. Jika gagal, sistem naik ke fallback lalu kembali ke model awal pada pertanyaan berikutnya.",
     )
     selected_fallback_models = st.multiselect(
         "Fallback model",
@@ -299,6 +330,456 @@ def render_admin_panel(
     return selected_model_id, selected_fallback_models, selected_temperature, prefer_ai, int(max_history_messages)
 
 
+def run_ai_consultation(prompt: str, selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool, extra_context: str = "") -> Tuple[str, Dict[str, Any]]:
+    if usage_limit_reached():
+        return (
+            "Batas pemakaian sesi sudah tercapai. Tekan Reset untuk memulai sesi baru, atau minta admin menaikkan batas sesi.",
+            {"source": "limit"},
+        )
+    return answer_message(
+        message=prompt,
+        history=st.session_state.messages,
+        client=client,
+        selected_model=selected_model_id,
+        fallback_models=selected_fallback_models,
+        temperature=selected_temperature,
+        max_history_messages=max_history_messages,
+        models_catalog=model_catalog,
+        prefer_ai=prefer_ai,
+        profile=st.session_state.farm_profile,
+        records=st.session_state.farm_records,
+        calendar_events=st.session_state.farm_calendar_events,
+        extra_context=extra_context,
+    )
+
+
+def render_ai_trace(meta: Dict[str, Any]) -> None:
+    if not (
+        st.session_state.admin_authenticated
+        and bool(ui_config.get("show_model_trace", True))
+        and meta.get("source") == "ai"
+    ):
+        return
+    usage = meta.get("usage", {}) or {}
+    trace = " → ".join(
+        f"{attempt.get('model')}" + (" ✓" if attempt.get("useful") else " ✗")
+        for attempt in meta.get("attempts", [])
+    )
+    caption_parts = [f"Model dipakai: {meta.get('model')}"]
+    if trace:
+        caption_parts.append(f"Urutan: {trace}")
+    if usage:
+        caption_parts.append(
+            f"Token: {usage.get('prompt_tokens', usage.get('input_tokens', 0))} in / "
+            f"{usage.get('completion_tokens', usage.get('output_tokens', 0))} out"
+        )
+    if bool(ui_config.get("show_cost", True)):
+        caption_parts.append(f"Estimasi biaya: {format_rupiah(meta.get('cost_rp', 0))}")
+    st.caption(" · ".join(caption_parts))
+
+
+def render_dashboard() -> None:
+    profile = normalise_profile(st.session_state.farm_profile)
+    summary = summarize_records(st.session_state.farm_records)
+    completeness = profile_completeness(profile)
+
+    st.header("Dashboard Farm")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Kelengkapan Profil", f"{completeness}%")
+    col2.metric("Populasi", f"{profile['population']} ekor")
+    col3.metric("Bobot Rata-rata", f"{profile['average_weight_kg']:.2f} kg")
+    col4.metric("Catatan Performa", summary["count"])
+    st.progress(completeness / 100)
+
+    left, right = st.columns([1.1, 1])
+    with left:
+        st.subheader("Ringkasan Profil")
+        st.markdown(summarize_profile(profile))
+        st.info(phase_guidance(profile["animal_type"], profile["phase"]))
+
+        flags = performance_flags(st.session_state.farm_records)
+        if flags:
+            st.warning("\n".join(f"- {flag}" for flag in flags))
+        else:
+            st.success("Belum ada tanda risiko performa dari catatan yang tersimpan.")
+
+    with right:
+        st.subheader("Checklist Hari Ini")
+        for item in quick_management_checklist(profile):
+            st.checkbox(item, value=False)
+
+        st.subheader("Jadwal Terdekat")
+        events = st.session_state.farm_calendar_events[:6]
+        if events:
+            st.dataframe(events, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Belum ada jadwal. Buka menu Kalender Manajemen untuk membuat jadwal otomatis.")
+
+    st.subheader("Ringkasan Performa")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("ADG", "-" if summary["adg"] is None else f"{summary['adg']:.3f} kg/hari")
+    c2.metric("FCR", "-" if summary["fcr"] is None else f"{summary['fcr']:.2f}")
+    c3.metric("Mortalitas", f"{summary['mortality_total']} ekor")
+    c4.metric("Total Pakan", f"{summary['feed_total']:.2f} kg")
+
+
+def render_profile() -> None:
+    st.header("Profil Peternakan")
+    st.caption("Profil ini akan dikirim sebagai konteks ke AI agar jawaban tidak generik.")
+    p = normalise_profile(st.session_state.farm_profile)
+
+    with st.form("profile_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            farm_name = st.text_input("Nama farm / kelompok", value=p.get("farm_name", ""))
+            animal = st.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0)
+            goal = st.selectbox("Tujuan usaha", PRODUCTION_GOALS, index=PRODUCTION_GOALS.index(p["production_goal"]) if p["production_goal"] in PRODUCTION_GOALS else 0)
+            phases = ANIMAL_PHASES.get(animal, [p.get("phase", "umum")])
+            current_phase = p.get("phase", phases[0])
+            if current_phase not in phases:
+                phases = [current_phase] + phases
+            phase = st.selectbox("Fase ternak", phases, index=phases.index(current_phase))
+            population = st.number_input("Populasi (ekor)", min_value=0, value=int(p.get("population", 0)), step=1)
+            average_weight = st.number_input("Bobot rata-rata (kg)", min_value=0.0, value=float(p.get("average_weight_kg", 0.0)), step=0.1)
+        with col2:
+            average_age = st.text_input("Umur rata-rata", value=p.get("average_age", ""), placeholder="contoh: 8 bulan / 21 hari")
+            location = st.text_input("Lokasi / kondisi iklim", value=p.get("location", ""), placeholder="contoh: Semarang, dataran rendah, musim hujan")
+            housing = st.text_input("Sistem kandang/kolam", value=p.get("housing_system", ""))
+            feed_available = st.text_area("Bahan pakan tersedia", value=p.get("feed_available", ""), height=80)
+            water_source = st.text_input("Sumber air", value=p.get("water_source", ""))
+            main_problem = st.text_area("Masalah utama / target perbaikan", value=p.get("main_problem", ""), height=80)
+            budget_note = st.text_input("Catatan modal/biaya", value=p.get("budget_note", ""))
+            market_target = st.text_input("Target pasar", value=p.get("market_target", ""))
+
+        saved = st.form_submit_button("Simpan profil", use_container_width=True)
+        if saved:
+            st.session_state.farm_profile = normalise_profile({
+                "farm_name": farm_name,
+                "animal_type": animal,
+                "production_goal": goal,
+                "phase": phase,
+                "population": population,
+                "average_age": average_age,
+                "average_weight_kg": average_weight,
+                "location": location,
+                "housing_system": housing,
+                "feed_available": feed_available,
+                "water_source": water_source,
+                "main_problem": main_problem,
+                "budget_note": budget_note,
+                "market_target": market_target,
+            })
+            st.success("Profil peternakan tersimpan dan akan dipakai sebagai konteks AI.")
+
+    with st.expander("Lihat ringkasan profil yang dikirim ke AI", expanded=True):
+        st.markdown(summarize_profile(st.session_state.farm_profile))
+
+
+def render_chat(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.header("Chat Pakar")
+    st.caption("Jawaban memakai persona Pakar Ternak Nusantara dan konteks profil farm, catatan performa, serta kalender yang tersedia.")
+
+    for item in st.session_state.messages:
+        with st.chat_message(item["role"]):
+            st.markdown(item["content"])
+
+    prompt = st.chat_input("Tanyakan masalah peternakan Anda...")
+    if prompt:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Pakar Ternak Nusantara sedang menganalisis..."):
+                response, meta = run_ai_consultation(prompt, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+            if meta.get("source") == "limit":
+                st.warning(response)
+            else:
+                st.markdown(response)
+                update_usage(meta)
+                render_ai_trace(meta)
+
+        st.session_state.last_meta = meta
+        st.session_state.messages.append({"role": "assistant", "content": response})
+
+
+def render_health_consultation(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.header("Konsultasi Kesehatan Ternak")
+    st.caption("Mode triase. Sistem memberi tindakan awal aman dan tanda bahaya, bukan pengganti pemeriksaan dokter hewan.")
+    p = normalise_profile(st.session_state.farm_profile)
+
+    uploaded = st.file_uploader("Unggah foto pendukung (opsional)", type=["jpg", "jpeg", "png", "webp"])
+    if uploaded:
+        st.info("Foto tersimpan di sesi ini sebagai catatan pendukung. Analisis visual tetap bersifat indikasi awal, bukan diagnosis final.")
+
+    with st.form("health_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            animal = st.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="health_animal")
+            population = st.number_input("Populasi total", min_value=1, value=max(int(p.get("population", 1)), 1), step=1)
+            affected = st.number_input("Jumlah yang sakit/terdampak", min_value=1, value=1, step=1)
+            phase = st.text_input("Umur/fase", value=p.get("phase", ""))
+        with col2:
+            duration = st.text_input("Durasi gejala", placeholder="contoh: 2 hari")
+            mortality = st.text_input("Kematian", placeholder="contoh: belum ada / 3 ekor mati")
+            feed_water = st.text_area("Pakan dan air terakhir", value=p.get("feed_available", ""), height=90)
+            housing = st.text_area("Kondisi kandang/kolam", value=p.get("housing_system", ""), height=90)
+        symptoms = st.text_area("Gejala utama", placeholder="contoh: mencret, lemas, tidak mau makan, batuk, kembung, pincang, produksi telur turun", height=110)
+        submitted = st.form_submit_button("Analisis kesehatan", use_container_width=True)
+
+    if submitted:
+        case = {
+            "animal_type": animal,
+            "population": population,
+            "affected": affected,
+            "phase": phase,
+            "duration": duration,
+            "mortality": mortality,
+            "feed_water": feed_water,
+            "housing": housing,
+            "symptoms": symptoms,
+            "photo_uploaded": bool(uploaded),
+        }
+        st.session_state.last_health_case = case
+        level, flags = triage_level(symptoms + " " + mortality)
+        if level == "DARURAT":
+            st.error("Tingkat triase: DARURAT. Segera lakukan isolasi dan hubungi dokter hewan/paramedik.")
+        elif level == "PERLU DIPANTAU KETAT":
+            st.warning("Tingkat triase: PERLU DIPANTAU KETAT.")
+        else:
+            st.info("Tingkat triase: RINGAN / BUTUH DATA TAMBAHAN.")
+        if flags:
+            st.write("Tanda bahaya terdeteksi:", ", ".join(flags))
+        st.markdown(local_triage_summary(animal, symptoms + " " + mortality, duration, affected, population))
+
+        prompt = "Analisis kasus kesehatan ternak berikut dan berikan rekomendasi praktis sesuai format pakar."
+        with st.spinner("Meminta analisis AI pakar kesehatan ternak..."):
+            response, meta = run_ai_consultation(
+                prompt,
+                selected_model_id,
+                selected_fallback_models,
+                selected_temperature,
+                max_history_messages,
+                prefer_ai,
+                extra_context=health_prompt_context(case),
+            )
+        st.subheader("Rekomendasi Pakar AI")
+        st.markdown(response)
+        update_usage(meta)
+        render_ai_trace(meta)
+
+
+def render_feed_formulation() -> None:
+    st.header("Formulasi Pakan")
+    st.caption("Hitung protein kasar estimasi, indeks energi relatif, dan biaya formula sederhana berbasis bahan lokal Indonesia.")
+    p = normalise_profile(st.session_state.farm_profile)
+
+    col1, col2, col3 = st.columns(3)
+    animal = col1.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="feed_animal")
+    phases = ANIMAL_PHASES.get(animal, [p.get("phase", "umum")])
+    phase = col2.selectbox("Fase", phases, index=phases.index(p["phase"]) if p["phase"] in phases else 0, key="feed_phase")
+    population = col3.number_input("Populasi", min_value=1, value=max(int(p.get("population", 1)), 1), step=1, key="feed_pop")
+
+    selected = st.multiselect(
+        "Pilih bahan pakan",
+        options=list(LOCAL_FEED_INGREDIENTS.keys()),
+        default=[x for x in st.session_state.formula_selected if x in LOCAL_FEED_INGREDIENTS],
+    )
+    st.session_state.formula_selected = selected
+
+    ingredients: List[Dict[str, float | str]] = []
+    if selected:
+        st.write("Masukkan komposisi dan harga bahan.")
+        for name in selected:
+            info = LOCAL_FEED_INGREDIENTS[name]
+            c1, c2, c3, c4 = st.columns([1.4, 1, 1, 1])
+            c1.markdown(f"**{name}**  \n{info['type']} | PK ±{info['protein']}%")
+            pct = c2.number_input("%", min_value=0.0, max_value=100.0, value=25.0 if name != "mineral mix" else 1.0, step=0.5, key=f"pct_{name}")
+            price = c3.number_input("Rp/kg", min_value=0.0, value=0.0, step=100.0, key=f"price_{name}")
+            c4.caption("Input as-fed sederhana")
+            ingredients.append({
+                "name": name,
+                "percent": pct,
+                "price_per_kg": price,
+                "protein": float(info["protein"]),
+                "energy": float(info["energy"]),
+                "type": str(info["type"]),
+            })
+
+    if st.button("Evaluasi formula", use_container_width=True):
+        st.markdown(formula_feedback(animal, phase, ingredients))
+
+    if animal in {"sapi", "kambing"}:
+        st.subheader("Ransum awal ruminansia")
+        c1, c2 = st.columns(2)
+        body_weight = c1.number_input("Bobot rata-rata (kg)", min_value=1.0, value=max(float(p.get("average_weight_kg", 25.0)), 1.0), step=0.5)
+        forage_ratio = c2.slider("Rasio hijauan (%)", 40.0, 90.0, 70.0, 5.0)
+        st.info(simple_ruminant_ration(animal, body_weight, population, forage_ratio))
+
+    with st.expander("Daftar bahan lokal bawaan"):
+        st.dataframe([
+            {"Bahan": k, "Jenis": v["type"], "Protein estimasi (%)": v["protein"], "Indeks energi": v["energy"]}
+            for k, v in LOCAL_FEED_INGREDIENTS.items()
+        ], use_container_width=True, hide_index=True)
+
+
+def render_records() -> None:
+    st.header("Catatan Performa Ternak")
+    st.caption("Gunakan untuk menghitung ADG, FCR, mortalitas, produksi, biaya, dan bahan evaluasi AI.")
+    p = normalise_profile(st.session_state.farm_profile)
+
+    with st.form("record_form"):
+        col1, col2, col3 = st.columns(3)
+        record_date = col1.date_input("Tanggal", value=date.today())
+        population = col2.number_input("Populasi", min_value=0, value=int(p.get("population", 0)), step=1)
+        avg_weight = col3.number_input("Bobot rata-rata (kg)", min_value=0.0, value=float(p.get("average_weight_kg", 0.0)), step=0.1)
+        col4, col5, col6 = st.columns(3)
+        feed_kg = col4.number_input("Pakan terpakai (kg)", min_value=0.0, value=0.0, step=0.1)
+        cost_rp = col5.number_input("Biaya hari ini (Rp)", min_value=0.0, value=0.0, step=1000.0)
+        mortality = col6.number_input("Mati (ekor)", min_value=0, value=0, step=1)
+        col7, col8 = st.columns(2)
+        eggs = col7.number_input("Telur (butir)", min_value=0, value=0, step=1)
+        milk_liter = col8.number_input("Susu (liter)", min_value=0.0, value=0.0, step=0.1)
+        note = st.text_area("Catatan", placeholder="contoh: pakan diganti, hujan deras, ada 2 ekor batuk", height=80)
+        sync_profile = st.checkbox("Sinkronkan populasi dan bobot ini ke profil", value=True)
+        submitted = st.form_submit_button("Simpan catatan", use_container_width=True)
+
+    if submitted:
+        record = {
+            "date": str(record_date),
+            "population": int(population),
+            "avg_weight_kg": float(avg_weight),
+            "feed_kg": float(feed_kg),
+            "cost_rp": float(cost_rp),
+            "mortality": int(mortality),
+            "eggs": int(eggs),
+            "milk_liter": float(milk_liter),
+            "note": note,
+        }
+        st.session_state.farm_records = add_record(st.session_state.farm_records, record)
+        if sync_profile:
+            st.session_state.farm_profile = normalise_profile({**p, "population": int(population), "average_weight_kg": float(avg_weight)})
+        st.success("Catatan performa tersimpan.")
+
+    summary = summarize_records(st.session_state.farm_records)
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Catatan", summary["count"])
+    c2.metric("ADG", "-" if summary["adg"] is None else f"{summary['adg']:.3f} kg/hari")
+    c3.metric("FCR", "-" if summary["fcr"] is None else f"{summary['fcr']:.2f}")
+    c4.metric("Mortalitas", summary["mortality_total"])
+    c5.metric("Biaya", format_rupiah(summary["cost_total"]))
+
+    flags = performance_flags(st.session_state.farm_records)
+    if flags:
+        st.warning("\n".join(f"- {flag}" for flag in flags))
+    st.info(records_context(st.session_state.farm_records))
+
+    if st.session_state.farm_records:
+        st.dataframe(st.session_state.farm_records, use_container_width=True, hide_index=True)
+        st.download_button(
+            "Download catatan performa JSON",
+            data=json.dumps(st.session_state.farm_records, ensure_ascii=False, indent=2),
+            file_name="catatan-performa-ternak.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+
+def render_calendar() -> None:
+    st.header("Kalender Manajemen")
+    st.caption("Buat jadwal sanitasi, evaluasi pakan, recording, reproduksi, dan kontrol kesehatan.")
+    p = normalise_profile(st.session_state.farm_profile)
+
+    col1, col2, col3 = st.columns(3)
+    start_date = col1.date_input("Mulai jadwal", value=date.today())
+    days = col2.number_input("Periode jadwal (hari)", min_value=7, max_value=365, value=60, step=7)
+    animal = col3.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="calendar_animal")
+    phase = st.text_input("Fase ternak", value=p.get("phase", ""), key="calendar_phase")
+
+    if st.button("Buat jadwal otomatis", use_container_width=True):
+        st.session_state.farm_calendar_events = generate_management_events(animal, start_date, int(days), phase)
+        st.success("Kalender manajemen dibuat dan akan menjadi konteks AI.")
+
+    if animal in {"sapi", "kambing", "kelinci"}:
+        with st.expander("Prediksi kelahiran dari tanggal kawin/IB"):
+            breeding_date = st.date_input("Tanggal kawin/IB", value=date.today(), key="breeding_date")
+            dates = breeding_dates(animal, breeding_date)
+            if dates:
+                st.dataframe([{"Kegiatan": k, "Tanggal": str(v)} for k, v in dates.items()], use_container_width=True, hide_index=True)
+
+    if st.session_state.farm_calendar_events:
+        st.dataframe(st.session_state.farm_calendar_events, use_container_width=True, hide_index=True)
+        st.download_button(
+            "Download kalender JSON",
+            data=json.dumps(st.session_state.farm_calendar_events, ensure_ascii=False, indent=2),
+            file_name="kalender-manajemen-ternak.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+    else:
+        st.info("Belum ada jadwal. Klik tombol buat jadwal otomatis.")
+
+
+def render_feed_calculator() -> None:
+    st.header("Kalkulator Kebutuhan Pakan")
+    p = normalise_profile(st.session_state.farm_profile)
+    col1, col2 = st.columns(2)
+    with col1:
+        animal_type = st.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="calc_animal")
+        count = st.number_input("Jumlah ternak (ekor)", min_value=1, value=max(int(p.get("population", 10)), 1), key="calc_count")
+    with col2:
+        weight = st.number_input("Berat rata-rata (kg)", min_value=0.1, value=float(p.get("average_weight_kg") or DEFAULT_WEIGHTS.get(animal_type, 1.0)), step=0.1, key="calc_weight")
+    if st.button("Hitung kebutuhan pakan"):
+        result = calculate_feed_needs(animal_type, int(count), float(weight))
+        st.success(result)
+        daily = float(weight) * FEED_RATES[animal_type] * int(count)
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.bar(["Harian", "Mingguan", "Bulanan"], [daily, daily * 7, daily * 30])
+        ax.set_ylabel("Kebutuhan Pakan (kg)")
+        ax.set_title("Estimasi Kebutuhan Pakan")
+        ax.grid(True, axis="y", alpha=0.3)
+        st.pyplot(fig)
+
+
+def render_growth_prediction() -> None:
+    st.header("Prediksi Pertumbuhan Ternak")
+    p = normalise_profile(st.session_state.farm_profile)
+    col1, col2 = st.columns(2)
+    with col1:
+        animal_type = st.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="growth_animal")
+        initial_weight = st.number_input("Berat awal (kg)", min_value=0.1, value=max(float(p.get("average_weight_kg", 1.0)), 0.1), step=0.1)
+    with col2:
+        daily_gain = st.number_input("Pertambahan berat harian (kg/hari)", min_value=0.0, value=0.1, step=0.01)
+        days = st.number_input("Periode (hari)", min_value=1, value=30)
+    if st.button("Prediksi"):
+        try:
+            result = predict_growth(initial_weight, daily_gain, int(days))
+            st.success(
+                f"{animal_type.capitalize()}: {result['initial_weight']:.2f} kg → {result['final_weight']:.2f} kg dalam {result['days']} hari. "
+                f"Kenaikan total {result['weight_gain']:.2f} kg."
+            )
+            st.pyplot(plot_growth_prediction(result))
+        except Exception as error:
+            st.error(str(error))
+
+
+def render_bep() -> None:
+    st.header("Analisis Break Even Point")
+    col1, col2 = st.columns(2)
+    with col1:
+        fixed_cost = st.number_input("Biaya tetap (Rp)", min_value=0, value=10_000_000, step=100_000)
+        price_per_unit = st.number_input("Harga jual per unit (Rp)", min_value=0, value=50_000, step=1_000)
+    with col2:
+        variable_cost_per_unit = st.number_input("Biaya variabel per unit (Rp)", min_value=0, value=30_000, step=1_000)
+    if st.button("Hitung BEP"):
+        st.success(calculate_bep(fixed_cost, price_per_unit, variable_cost_per_unit))
+        margin = price_per_unit - variable_cost_per_unit
+        if margin > 0:
+            bep_units = fixed_cost / margin
+            bep_revenue = bep_units * price_per_unit
+            st.pyplot(plot_bep(fixed_cost, price_per_unit, variable_cost_per_unit, bep_units, bep_revenue))
+
+
 init_state()
 
 model_ids = [model["id"] for model in model_catalog]
@@ -315,27 +796,37 @@ prefer_ai = True
 max_history_messages = max_history_messages_default
 
 st.title("🐄 Pakar Ternak Nusantara")
-st.caption("Asisten AI peternakan dengan persona konsultan kandang: pakan, kesehatan, reproduksi, produksi, limbah, dan analisis usaha.")
+st.caption("Asisten AI manajemen peternakan: profil farm, pakan, kesehatan, reproduksi, produksi, limbah, biaya, kalender, dan recording performa.")
 
 with st.sidebar:
     st.header("Mode Aplikasi")
-    tool_option = st.selectbox("Mode", ["Chat Pakar", "Kalkulator Pakan", "Prediksi Pertumbuhan", "Analisis BEP"])
+    tool_option = st.selectbox("Mode", APP_MODES)
 
     st.divider()
-    st.header("Percakapan")
+    p = normalise_profile(st.session_state.farm_profile)
+    st.header("Profil Ringkas")
+    st.caption(f"{p['population']} ekor {p['animal_type']} · {p['phase']} · {profile_completeness(p)}% lengkap")
+    st.progress(profile_completeness(p) / 100)
+
+    st.divider()
+    st.header("Data & Percakapan")
     col_a, col_b = st.columns(2)
     with col_a:
-        if st.button("Reset", use_container_width=True):
+        if st.button("Reset Chat", use_container_width=True):
             reset_chat()
             st.rerun()
     with col_b:
         st.download_button(
             "Ekspor",
-            data=export_chat_json(),
-            file_name="riwayat-chat-ternak.json",
+            data=export_app_json(),
+            file_name="pakar-ternak-nusantara-data.json",
             mime="application/json",
             use_container_width=True,
         )
+    if st.session_state.admin_authenticated:
+        if st.button("Reset Data Farm", use_container_width=True):
+            reset_farm_data()
+            st.rerun()
 
     (
         selected_model_id,
@@ -345,120 +836,23 @@ with st.sidebar:
         max_history_messages,
     ) = render_admin_panel(model_ids, default_model, fallback_defaults, max_history_messages_default)
 
-if tool_option == "Chat Pakar":
-    for item in st.session_state.messages:
-        with st.chat_message(item["role"]):
-            st.markdown(item["content"])
-
-    prompt = st.chat_input("Tanyakan masalah peternakan Anda...")
-    if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            if usage_limit_reached():
-                response = (
-                    "Batas pemakaian sesi sudah tercapai. Tekan Reset untuk memulai sesi baru, "
-                    "atau minta admin menaikkan batas sesi."
-                )
-                meta: Dict[str, Any] = {"source": "limit"}
-                st.warning(response)
-            else:
-                with st.spinner("Pakar Ternak Nusantara sedang menganalisis..."):
-                    response, meta = answer_message(
-                        message=prompt,
-                        history=st.session_state.messages[:-1],
-                        client=client,
-                        selected_model=selected_model_id,
-                        fallback_models=selected_fallback_models,
-                        temperature=selected_temperature,
-                        max_history_messages=max_history_messages,
-                        models_catalog=model_catalog,
-                        prefer_ai=prefer_ai,
-                    )
-                st.markdown(response)
-                update_usage(meta)
-
-                if (
-                    st.session_state.admin_authenticated
-                    and bool(ui_config.get("show_model_trace", True))
-                    and meta.get("source") == "ai"
-                ):
-                    usage = meta.get("usage", {}) or {}
-                    trace = " → ".join(
-                        f"{attempt.get('model')}" + (" ✓" if attempt.get("useful") else " ✗")
-                        for attempt in meta.get("attempts", [])
-                    )
-                    caption_parts = [f"Model dipakai: {meta.get('model')}"]
-                    if trace:
-                        caption_parts.append(f"Urutan: {trace}")
-                    if usage:
-                        caption_parts.append(
-                            f"Token: {usage.get('prompt_tokens', usage.get('input_tokens', 0))} in / "
-                            f"{usage.get('completion_tokens', usage.get('output_tokens', 0))} out"
-                        )
-                    if bool(ui_config.get("show_cost", True)):
-                        caption_parts.append(f"Estimasi biaya: {format_rupiah(meta.get('cost_rp', 0))}")
-                    st.caption(" · ".join(caption_parts))
-
-        st.session_state.last_meta = meta
-        st.session_state.messages.append({"role": "assistant", "content": response})
-
+if tool_option == "Dashboard Farm":
+    render_dashboard()
+elif tool_option == "Chat Pakar":
+    render_chat(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "Profil Peternakan":
+    render_profile()
+elif tool_option == "Konsultasi Kesehatan":
+    render_health_consultation(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "Formulasi Pakan":
+    render_feed_formulation()
+elif tool_option == "Catatan Performa":
+    render_records()
+elif tool_option == "Kalender Manajemen":
+    render_calendar()
 elif tool_option == "Kalkulator Pakan":
-    st.header("Kalkulator Kebutuhan Pakan")
-    col1, col2 = st.columns(2)
-    with col1:
-        animal_type = st.selectbox("Jenis ternak", ANIMAL_TYPES)
-        count = st.number_input("Jumlah ternak (ekor)", min_value=1, value=10)
-    with col2:
-        weight = st.number_input("Berat rata-rata (kg)", min_value=0.1, value=float(DEFAULT_WEIGHTS.get(animal_type, 1.0)), step=0.1)
-    if st.button("Hitung kebutuhan pakan"):
-        result = calculate_feed_needs(animal_type, int(count), float(weight))
-        st.success(result)
-        daily = float(weight) * FEED_RATES[animal_type] * int(count)
-        fig, ax = plt.subplots(figsize=(8, 4))
-        ax.bar(["Harian", "Mingguan", "Bulanan"], [daily, daily * 7, daily * 30])
-        ax.set_ylabel("Kebutuhan Pakan (kg)")
-        ax.set_title("Estimasi Kebutuhan Pakan")
-        ax.grid(True, axis="y", alpha=0.3)
-        st.pyplot(fig)
-
+    render_feed_calculator()
 elif tool_option == "Prediksi Pertumbuhan":
-    st.header("Prediksi Pertumbuhan Ternak")
-    col1, col2 = st.columns(2)
-    with col1:
-        animal_type = st.selectbox("Jenis ternak", ANIMAL_TYPES)
-        initial_weight = st.number_input("Berat awal (kg)", min_value=0.1, value=1.0, step=0.1)
-    with col2:
-        daily_gain = st.number_input("Pertambahan berat harian (kg/hari)", min_value=0.0, value=0.1, step=0.01)
-        days = st.number_input("Periode (hari)", min_value=1, value=30)
-    if st.button("Prediksi"):
-        try:
-            result = predict_growth(initial_weight, daily_gain, int(days))
-            st.success(
-                f"{animal_type.capitalize()}: {result['initial_weight']:.2f} kg → {result['final_weight']:.2f} kg dalam {result['days']} hari. "
-                f"Kenaikan total {result['weight_gain']:.2f} kg."
-            )
-            st.pyplot(plot_growth_prediction(result))
-        except Exception as error:
-            st.error(str(error))
-
+    render_growth_prediction()
 elif tool_option == "Analisis BEP":
-    st.header("Analisis Break Even Point")
-    col1, col2 = st.columns(2)
-    with col1:
-        fixed_cost = st.number_input("Biaya tetap (Rp)", min_value=0, value=10_000_000, step=100_000)
-        price_per_unit = st.number_input("Harga jual per unit (Rp)", min_value=0, value=50_000, step=1_000)
-    with col2:
-        variable_cost_per_unit = st.number_input("Biaya variabel per unit (Rp)", min_value=0, value=30_000, step=1_000)
-    if st.button("Hitung BEP"):
-        st.success(calculate_bep(fixed_cost, price_per_unit, variable_cost_per_unit))
-        margin = price_per_unit - variable_cost_per_unit
-        if margin > 0:
-            bep_units = fixed_cost / margin
-            bep_revenue = bep_units * price_per_unit
-            st.pyplot(plot_bep(fixed_cost, price_per_unit, variable_cost_per_unit, bep_units, bep_revenue))
-
-st.markdown("---")
-st.caption("© 2026 Pakar Ternak Nusantara — AI peternakan untuk edukasi, manajemen, dan analisis usaha. Untuk penyakit berat, tetap konsultasikan dokter hewan/tenaga kesehatan hewan setempat.")
+    render_bep()

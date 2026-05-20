@@ -1,26 +1,31 @@
 # Pakar Ternak Nusantara
 
-Aplikasi Streamlit chatbot peternakan dengan integrasi OpenAI-compatible Chat Completions via SlashAI endpoint:
+Aplikasi Streamlit asisten manajemen peternakan dengan integrasi OpenAI-compatible Chat Completions via SlashAI endpoint:
 
 ```text
 https://api.slashai.my.id/v1/chat/completions
 ```
 
-Persona utama aplikasi adalah **Pakar Ternak Nusantara**: konsultan peternakan praktis untuk pakan, kandang/kolam, kesehatan, reproduksi, produksi, pupuk organik, biogas, dan analisis usaha.
+Persona utama aplikasi adalah **Pakar Ternak Nusantara**: konsultan peternakan praktis untuk pakan, kandang/kolam, kesehatan, reproduksi, produksi, pupuk organik, biogas, biaya, recording, dan manajemen farm Indonesia.
 
 ## Fitur utama
 
-- Integrasi API via Streamlit Secrets, bukan hardcode di repo.
+- Integrasi API via **Streamlit Secrets**, bukan hardcode di repo.
 - Default model murah: `slashai/gpt-5-nano`.
 - Fallback bertingkat jika respons kosong, error, kepotong, atau tidak layak.
-- Riwayat chat dikirim ke model agar konteks percakapan tetap nyambung.
-- Persona ahli peternakan dibuat melalui `persona.py`.
+- Panel teknis/API disembunyikan dalam **Admin Mode** dengan kunci dari Streamlit Secrets.
+- Chat history, profil farm, catatan performa, dan kalender manajemen dikirim sebagai konteks ke AI.
+- Persona pakar peternakan kuat melalui `persona.py`.
+- Profil peternakan pengguna: komoditas, fase, populasi, bobot, pakan, kandang, masalah utama, biaya, target pasar.
+- Dashboard farm: ringkasan profil, checklist, jadwal terdekat, ADG, FCR, mortalitas, dan total pakan.
+- Konsultasi kesehatan/triase: gejala, durasi, jumlah sakit, kematian, kondisi pakan-air, kandang/kolam, tanda bahaya, dan rekomendasi aman.
+- Formulasi pakan sederhana: bahan lokal, estimasi protein, indeks energi, biaya campuran, dan ransum awal ruminansia.
+- Catatan performa: bobot, pakan, biaya, mortalitas, telur, susu, catatan lapangan, ADG, FCR, ekspor JSON.
+- Kalender manajemen: sanitasi, evaluasi pakan, recording, kontrol kesehatan, reproduksi, sampling bobot, dan prediksi kelahiran.
+- Kalkulator pakan, prediksi pertumbuhan, dan analisis BEP.
 - Estimasi token dan biaya berdasarkan `usage` dari API.
 - Limit sederhana per sesi untuk menahan biaya.
-- Tombol reset chat dan ekspor riwayat JSON.
-- Panel teknis/API disembunyikan dalam Admin Mode dengan kunci dari Streamlit Secrets.
-- Kalkulator pakan, prediksi pertumbuhan, dan analisis BEP.
-- Struktur kode modular agar mudah dirawat.
+- Tombol reset chat, reset data farm khusus admin, dan ekspor data JSON.
 
 ## Struktur file
 
@@ -31,6 +36,11 @@ chat_router.py            # Routing chat: lokal, tools, AI, fallback
 persona.py                # System prompt/persona ahli peternakan
 calculators.py            # Kalkulator pakan, pertumbuhan, BEP
 domain_data.py            # Basis pengetahuan lokal dan intent sederhana
+farm_profile.py           # Profil farm, fase ternak, checklist, prediksi kebuntingan
+health_triage.py          # Triase kesehatan dan tanda bahaya
+feed_formulation.py       # Formula pakan, bahan lokal, target protein sederhana
+farm_records.py           # Recording performa, ADG, FCR, mortalitas, produksi, biaya
+farm_calendar.py          # Kalender manajemen otomatis
 model_catalog.py          # Daftar model, harga, estimasi biaya
 models.toml               # Katalog model dan harga per 1 juta token
 config.toml               # Konfigurasi umum tanpa API key
@@ -55,7 +65,7 @@ api_key = "ISI_API_KEY_ANDA"
 password = "ISI_KUNCI_ADMIN_ANDA"
 ```
 
-`[admin].password` dipakai untuk membuka panel admin di sidebar. Panel ini menyimpan status API, sumber API key, pilihan model, fallback model, temperature, token, estimasi biaya, batas sesi, tes koneksi, dan debug konfigurasi. Pengguna biasa hanya melihat mode aplikasi dan tombol percakapan.
+`[admin].password` dipakai untuk membuka panel admin di sidebar. Panel ini menyimpan status API, sumber API key, pilihan model, fallback model, temperature, token, estimasi biaya, batas sesi, tes koneksi, dan debug konfigurasi. Pengguna biasa tidak melihat panel teknis/API.
 
 ## Cara deploy Streamlit Online
 
@@ -75,7 +85,6 @@ password = "ISI_KUNCI_ADMIN_ANDA"
 
 Jangan masukkan API key atau kunci admin ke `config.toml` atau file repository.
 
-
 ## Admin Mode
 
 Panel admin berada di sidebar dan terkunci dengan kunci dari Streamlit Secrets. Tambahkan bagian berikut di **App settings → Secrets**:
@@ -93,6 +102,7 @@ Setelah login admin, panel akan menampilkan:
 - Pemakaian sesi, token, estimasi biaya, dan batas biaya.
 - Tombol tes koneksi API.
 - Debug konfigurasi jika `show_debug = true` di `config.toml`.
+- Tombol reset data farm.
 
 Tekan **Kunci kembali panel admin** untuk menutup panel.
 
@@ -126,7 +136,7 @@ max_history_messages = 16
 
 Limit ini berbasis session Streamlit, bukan database global. Untuk produksi serius, tambahkan database/identity user bila ingin membatasi semua pengguna secara global.
 
-## Catatan teknis
+## Catatan teknis API
 
 Parser respons API mendukung:
 
@@ -139,4 +149,4 @@ Parser respons API mendukung:
 
 ## Catatan keselamatan
 
-Jawaban kesehatan hewan bersifat edukatif. Untuk gejala berat, kematian mendadak, outbreak, penyakit menular, atau penurunan produksi ekstrem, tetap hubungi dokter hewan/tenaga kesehatan hewan setempat.
+Jawaban kesehatan hewan bersifat edukatif dan triase awal. Untuk gejala berat, kematian mendadak, outbreak, penyakit menular, kembung parah, tidak mau makan lebih dari 24 jam, atau penurunan produksi ekstrem, tetap hubungi dokter hewan/tenaga kesehatan hewan setempat.

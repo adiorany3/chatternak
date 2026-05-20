@@ -177,6 +177,47 @@ APP_MODES = [
     "Edukasi & Laporan",
 ]
 
+WORKFLOW_GROUPS = {
+    "1. Mulai & Data Farm": [
+        "Beranda",
+        "Input Data",
+    ],
+    "2. Konsultasi & Keputusan": [
+        "Konsultasi AI",
+        "Insight & Keputusan",
+    ],
+    "3. Operasional Enterprise": [
+        "Manajemen Enterprise",
+        "Database Supabase",
+    ],
+    "4. Alat, Edukasi & Laporan": [
+        "Alat Hitung",
+        "Edukasi & Laporan",
+    ],
+}
+
+WORKFLOW_LABELS = {
+    "Beranda": "🏠 Beranda — ringkasan farm & alur kerja",
+    "Input Data": "📝 Input Data — profil, recording, kalender",
+    "Konsultasi AI": "🤖 Konsultasi AI — chat, triase, 5 departemen",
+    "Insight & Keputusan": "📊 Insight & Keputusan — KPI, risiko, SOP",
+    "Manajemen Enterprise": "🏢 Manajemen Enterprise — multi-farm, batch, direksi",
+    "Database Supabase": "🗄️ Database Supabase — simpan/pulihkan permanen",
+    "Alat Hitung": "🧮 Alat Hitung — pakan, pertumbuhan, BEP",
+    "Edukasi & Laporan": "📚 Edukasi & Laporan — PDF, XLSX, library",
+}
+
+WORKFLOW_HELP = {
+    "Beranda": "Mulai dari sini untuk melihat kondisi umum, peta 5 departemen, dan alur kerja.",
+    "Input Data": "Isi data dasar farm, catatan performa, dan kalender. AI lebih akurat jika data ini lengkap.",
+    "Konsultasi AI": "Gunakan untuk bertanya, triase kesehatan, atau konsultasi berbasis 5 departemen.",
+    "Insight & Keputusan": "Baca rekomendasi AI, skor risiko, KPI, SOP, prediksi usaha, dan kartu keputusan.",
+    "Manajemen Enterprise": "Untuk pengelolaan multi-farm, multi-batch, dashboard direksi, early warning, dan keuangan enterprise.",
+    "Database Supabase": "Menu admin untuk tes koneksi, simpan sesi, dan pulihkan data dari Supabase.",
+    "Alat Hitung": "Gunakan kalkulator cepat untuk pakan, pertumbuhan, dan BEP tanpa harus membuka modul lain.",
+    "Edukasi & Laporan": "Buka library pengetahuan, katalog komoditas, materi edukasi, laporan Markdown/PDF, dan aturan pakar.",
+}
+
 WORKFLOW_STEPS = [
     {
         "step": "1",
@@ -3035,11 +3076,39 @@ clear_prepared_downloads_if_stale()
 
 with st.sidebar:
     st.header("Menu Utama")
+    st.caption("Alur dibuat bertahap agar pengguna tidak bingung: mulai dari data, konsultasi, keputusan, lalu backup/laporan.")
+
+    current_tool = st.session_state.get("selected_workflow", "Beranda")
+    if current_tool not in APP_MODES:
+        current_tool = "Beranda"
+
+    current_group = next(
+        (group for group, options in WORKFLOW_GROUPS.items() if current_tool in options),
+        list(WORKFLOW_GROUPS.keys())[0],
+    )
+
+    workflow_group = st.selectbox(
+        "Kelompok alur kerja",
+        list(WORKFLOW_GROUPS.keys()),
+        index=list(WORKFLOW_GROUPS.keys()).index(current_group),
+        help="Pilih kelompok kerja terlebih dahulu agar daftar menu lebih pendek dan rapi.",
+        key="selected_workflow_group",
+    )
+
+    available_modes = WORKFLOW_GROUPS[workflow_group]
+    if current_tool not in available_modes:
+        current_tool = available_modes[0]
+
     tool_option = st.selectbox(
         "Pilih alur kerja",
-        APP_MODES,
-        help="Menu dibuat ringkas agar peternak tidak bingung. Fitur detail ada di dalam tab setiap menu.",
+        available_modes,
+        index=available_modes.index(current_tool),
+        format_func=lambda value: WORKFLOW_LABELS.get(value, value),
+        help="Pilih menu kerja sesuai kebutuhan. Detail fitur tersedia sebagai tab di dalam halaman.",
+        key="selected_workflow",
     )
+
+    st.info(WORKFLOW_HELP.get(tool_option, "Ikuti alur kerja sesuai kebutuhan farm."))
 
     p = normalise_profile(st.session_state.farm_profile)
     completeness = profile_completeness(p)

@@ -85,15 +85,23 @@ Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 
 ## Alur Aplikasi Sederhana
 
-Sidebar memakai 7 menu utama agar tetap ringkas namun mencakup level peternak rakyat sampai enterprise:
+Sidebar sekarang memakai 2 tingkat pilihan agar dropdown **Pilih alur kerja** lebih tertata dan tidak terlalu panjang. Pertama pilih **Kelompok alur kerja**, lalu pilih menu kerja di dalam kelompok tersebut.
 
-1. **Beranda** — ringkasan farm, risiko, insight cepat, dan alur kerja.
-2. **Input Data** — profil farm, catatan performa, dan kalender.
-3. **Konsultasi AI** — konsultasi bertahap, konsultasi 5 departemen, chat pakar, dan triase kesehatan.
-4. **Insight & Keputusan** — AI insight, formulasi pakan, KPI, prediksi usaha, SOP, biosecurity, dan teknologi hasil ternak.
-5. **Manajemen Enterprise** — multi-farm, role, KPI, early warning, database, keuangan, knowledge base, dan audit trail.
-6. **Alat Hitung** — kalkulator pakan, prediksi pertumbuhan, dan BEP.
-7. **Edukasi & Laporan** — library lokal, materi edukasi, dan laporan manajemen.
+**1. Mulai & Data Farm**
+- **Beranda** — ringkasan farm, risiko, insight cepat, dan alur kerja.
+- **Input Data** — profil farm, catatan performa, dan kalender.
+
+**2. Konsultasi & Keputusan**
+- **Konsultasi AI** — konsultasi bertahap, konsultasi 5 departemen, chat pakar, dan triase kesehatan.
+- **Insight & Keputusan** — AI insight, formulasi pakan, KPI, prediksi usaha, SOP, biosecurity, dan teknologi hasil ternak.
+
+**3. Operasional Enterprise**
+- **Manajemen Enterprise** — multi-farm, role, KPI, early warning, keuangan, knowledge base, dan audit trail.
+- **Database Supabase** — tes koneksi, simpan sesi, dan pulihkan data permanen dari Supabase.
+
+**4. Alat, Edukasi & Laporan**
+- **Alat Hitung** — kalkulator pakan, prediksi pertumbuhan, dan BEP.
+- **Edukasi & Laporan** — library lokal, materi edukasi, laporan manajemen, PDF, dan XLSX.
 
 Algoritma kerja utama:
 
@@ -396,7 +404,10 @@ Menu **Database Supabase** sengaja dibuat sebagai menu utama agar tidak tersembu
 
 ## Optimasi Responsivitas Dropdown/Menu
 
-Versi ini mengurangi proses berat saat pengguna hanya berpindah dropdown/menu:
+Versi ini mengurangi proses berat saat pengguna hanya berpindah dropdown/menu dan merapikan pilihan alur kerja:
+
+- Sidebar memakai 2 tingkat dropdown: **Kelompok alur kerja** dan **Pilih alur kerja**.
+- Setiap menu diberi label ikon dan deskripsi singkat agar pengguna memahami tujuan menu sebelum membuka halaman.
 
 - File XLSX/PDF tidak lagi dibuat otomatis pada setiap rerun Streamlit.
 - Backup dan laporan dibuat secara lazy melalui tombol **Siapkan / Perbarui File Backup**.

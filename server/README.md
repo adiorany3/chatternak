@@ -175,3 +175,18 @@ Sebelum melakukan **Reset Chat** atau **Reset Data Farm**, aplikasi akan menanya
 > Apakah database sudah Anda download?
 
 Tombol reset akan terkunci sampai pengguna mencentang konfirmasi bahwa Backup XLSX sudah diunduh. Ini mencegah data hilang ketika session Streamlit habis, app restart, atau data belum sempat dibackup.
+
+## Laporan PDF Profesional
+
+Aplikasi menyediakan laporan peternakan dalam format PDF siap cetak melalui menu **Edukasi & Laporan → Laporan** atau panel **Backup XLSX**. Laporan PDF memuat:
+
+- ringkasan eksekutif farm;
+- profil peternakan;
+- skor kesiapan dan risiko;
+- KPI performa seperti ADG, FCR, mortalitas, pakan, dan biaya;
+- ringkasan biosecurity dan agenda manajemen;
+- insight AI terakhir dan log keputusan;
+- footer **Developed by Galuh Adi Insani**.
+
+PDF bersifat laporan baca/cetak. Untuk backup dan restore data, tetap gunakan file XLSX.
+

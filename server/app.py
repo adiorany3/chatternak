@@ -58,6 +58,7 @@ from decision_support import (
 from model_catalog import format_model_option, format_rupiah, get_model_by_id, load_model_catalog
 from openai_integration import DEFAULT_CONFIG, OpenAIChatAPI
 from session_storage import build_session_payload, export_session_xlsx, import_session_xlsx, session_filename
+from pdf_report import generate_pdf_report, pdf_report_filename
 from ui_theme import apply_accessible_theme
 from expert_rules import (
     build_expert_context,
@@ -262,6 +263,23 @@ def export_app_json() -> str:
 
 def get_session_xlsx_bytes() -> bytes:
     return export_session_xlsx(build_current_session_payload())
+
+
+def build_pdf_report_context() -> Dict[str, Any]:
+    profile = normalise_profile(st.session_state.farm_profile)
+    records = st.session_state.farm_records
+    calendar_events = st.session_state.farm_calendar_events
+    health_case = st.session_state.last_health_case
+    return {
+        "benchmark": benchmark_kpi(profile, records),
+        "readiness": readiness_score(profile, records, calendar_events, st.session_state.biosecurity_checked),
+        "risk": farm_risk_score(profile, records, calendar_events, health_case, st.session_state.biosecurity_checked),
+        "local_insights": local_operational_insights(profile, records, calendar_events, health_case),
+    }
+
+
+def get_session_pdf_bytes() -> bytes:
+    return generate_pdf_report(build_current_session_payload(), build_pdf_report_context())
 
 
 def autosave_session_xlsx() -> None:
@@ -1521,8 +1539,25 @@ Tanggal: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 Developed by Galuh Adi Insani
 """.strip()
     st.markdown(report)
-    st.download_button("Download Laporan Markdown", data=report, file_name="laporan-manajemen-pakar-ternak.md", mime="text/markdown", use_container_width=True)
-    st.download_button("Download Backup Lengkap XLSX", data=get_session_xlsx_bytes(), file_name=session_filename(build_current_session_payload()), mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+    report_payload = build_current_session_payload()
+    report_context = build_pdf_report_context()
+    col_pdf, col_md, col_xlsx = st.columns(3)
+    with col_pdf:
+        try:
+            st.download_button(
+                "Download Laporan PDF",
+                data=generate_pdf_report(report_payload, report_context),
+                file_name=pdf_report_filename(report_payload),
+                mime="application/pdf",
+                use_container_width=True,
+                key="report_download_pdf",
+            )
+        except Exception as error:
+            st.error(f"Gagal membuat PDF: {error}")
+    with col_md:
+        st.download_button("Download Laporan Markdown", data=report, file_name="laporan-manajemen-pakar-ternak.md", mime="text/markdown", use_container_width=True)
+    with col_xlsx:
+        st.download_button("Download Backup Lengkap XLSX", data=get_session_xlsx_bytes(), file_name=session_filename(report_payload), mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
 def render_workflow_overview() -> None:
     st.subheader("Alur kerja sederhana")
@@ -1699,8 +1734,16 @@ with st.sidebar:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
+            st.download_button(
+                "Download Laporan PDF",
+                data=generate_pdf_report(xlsx_payload, build_pdf_report_context()),
+                file_name=pdf_report_filename(xlsx_payload),
+                mime="application/pdf",
+                use_container_width=True,
+                key="sidebar_download_pdf_report",
+            )
         except Exception as error:
-            st.error(f"Gagal membuat backup XLSX: {error}")
+            st.error(f"Gagal membuat backup/laporan: {error}")
 
         restore_file = st.file_uploader("Pulihkan dari XLSX", type=["xlsx"], key="restore_xlsx_file")
         if st.button("Pulihkan Data", use_container_width=True, disabled=restore_file is None):

@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 DEFAULT_EXPERT_MEMORY: List[Dict[str, Any]] = [
     {
         "category": "Identitas Pakar",
-        "memory": "AI Pakar Ternak harus berperan sebagai ahli peternakan hulu-hilir Indonesia: nutrisi/pakan, produksi, sosial-ekonomi, teknologi hasil, pemuliaan-reproduksi, kesehatan, biosecurity, SOP, KPI, dan manajemen usaha.",
+        "memory": "Decision Support System Ternak harus berperan sebagai ahli peternakan hulu-hilir Indonesia: nutrisi/pakan, produksi, sosial-ekonomi, teknologi hasil, pemuliaan-reproduksi, kesehatan, biosecurity, SOP, KPI, dan manajemen usaha.",
         "priority": "Tinggi",
         "source": "default",
     },

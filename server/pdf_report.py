@@ -10,7 +10,7 @@ from commodity_breeds import breed_detail, commodity_context as commodity_breed_
 from farm_profile import goal_context, goal_label
 from enterprise_features import executive_summary, finance_snapshot, downstream_guidance
 
-APP_NAME = "AI Pakar Ternak"
+APP_NAME = "Decision Support System Ternak"
 DEVELOPER = "Developed by Galuh Adi Insani (Fakultas Peternakan UGM)"
 
 
@@ -140,7 +140,7 @@ def pdf_report_filename(payload: Dict[str, Any]) -> str:
     farm_name = str(profile.get("farm_name") or "farm").strip().lower()
     safe_name = "".join(ch if ch.isalnum() else "-" for ch in farm_name).strip("-") or "farm"
     date_code = datetime.now().strftime("%Y%m%d-%H%M")
-    return f"laporan-ai-pakar-ternak-{safe_name}-{date_code}.pdf"
+    return f"laporan-decision-support-system-ternak-{safe_name}-{date_code}.pdf"
 
 
 def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None = None) -> bytes:
@@ -189,7 +189,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
         leftMargin=1.35 * cm,
         topMargin=1.45 * cm,
         bottomMargin=1.45 * cm,
-        title="Laporan AI Pakar Ternak",
+        title="Laporan Decision Support System Ternak",
         author="Galuh Adi Insani (Fakultas Peternakan UGM)",
     )
 
@@ -273,7 +273,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
 
     story.append(Spacer(1, 1.5 * cm))
     story.append(_make_paragraph("Laporan Peternakan", styles["CoverTitle"]))
-    story.append(_make_paragraph("AI Pakar Ternak", styles["CoverTitle"]))
+    story.append(_make_paragraph("Decision Support System Ternak", styles["CoverTitle"]))
     story.append(_make_paragraph(
         "Laporan profesional berbasis data session: profil farm, recording performa, biosecurity, agenda manajemen, insight AI, dan log keputusan.",
         styles["CoverSub"],

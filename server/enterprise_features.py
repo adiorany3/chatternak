@@ -408,7 +408,7 @@ def enterprise_report_markdown(profile: Dict[str, Any], records: List[Dict[str, 
     finance = finance_snapshot(profile, records, state.get("finance_transactions", []))
     downstream = downstream_guidance(profile)
     lines = [
-        "# Laporan Enterprise AI Pakar Ternak",
+        "# Laporan Enterprise Decision Support System Ternak",
         f"Tanggal: {datetime.now().strftime('%d-%m-%Y %H:%M')}",
         f"Perusahaan/Farm: {state.get('company_name') or profile.get('farm_name') or '-'}",
         f"Role pembaca: {state.get('current_role')}",

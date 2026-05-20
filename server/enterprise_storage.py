@@ -325,7 +325,7 @@ def save_postgres(payload: Dict[str, Any], cfg: Dict[str, str]) -> Dict[str, Any
         user_label_cols = ", user_label" if "user_label" in columns else ""
         user_label_values = ", %s" if "user_label" in columns else ""
         user_label_update = ", user_label = EXCLUDED.user_label" if "user_label" in columns else ""
-        user_label = str((payload.get("profile") or {}).get("farm_name") or payload.get("app") or "AI Pakar Ternak")
+        user_label = str((payload.get("profile") or {}).get("farm_name") or payload.get("app") or "Decision Support System Ternak")
 
         params = [session_id]
         if "user_label" in columns:

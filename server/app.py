@@ -143,7 +143,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 SESSION_BACKUP_DIR = Path(tempfile.gettempdir()) / "ai_pakar_ternak_sessions"
 
 st.set_page_config(
-    page_title="AI Pakar Ternak",
+    page_title="Decision Support System Ternak",
     page_icon="🐄",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -612,7 +612,7 @@ def default_ai_core_memory_items() -> List[Dict[str, Any]]:
             "kind": "persona",
             "category": "Persona Ahli",
             "priority": "Tinggi",
-            "memory": "AI Pakar Ternak harus bertindak sebagai konsultan peternakan hulu-hilir Indonesia yang menguasai nutrisi, produksi, reproduksi-pemuliaan, sosial-ekonomi, teknologi hasil, kesehatan, biosecurity, KPI, SOP, dan keputusan direksi.",
+            "memory": "Decision Support System Ternak harus bertindak sebagai konsultan peternakan hulu-hilir Indonesia yang menguasai nutrisi, produksi, reproduksi-pemuliaan, sosial-ekonomi, teknologi hasil, kesehatan, biosecurity, KPI, SOP, dan keputusan direksi.",
             "source": "default_seed",
         },
         {
@@ -930,7 +930,7 @@ def render_memory_admin() -> None:
             st.info("Belum ada data sesi yang cukup untuk membuat saran memory.")
     with st.expander("Format Streamlit Secrets untuk memory permanen", expanded=False):
         secret_example = """[expert_memory]
-organization_context = "AI Pakar Ternak digunakan untuk mendukung keputusan peternakan hulu-hilir berstandar akademik dan industri."
+organization_context = "Decision Support System Ternak digunakan untuk mendukung keputusan peternakan hulu-hilir berstandar akademik dan industri."
 strategic_role = "Jawaban harus sesuai kebutuhan pimpinan/direktur utama: ringkas, berbasis risiko, KPI, biaya, prioritas, dan rencana eksekusi."
 notes = [
   "Selalu bedakan rekomendasi untuk peternak rakyat dan industri modern.",
@@ -1300,7 +1300,7 @@ def render_decision_log() -> None:
 
 def render_department_framework() -> None:
     st.subheader("Kerangka Hulu–Hilir 5 Departemen")
-    st.caption("Kerangka ini memastikan AI Pakar Ternak tidak hanya menjawab budidaya, tetapi juga pakan, produksi, reproduksi/genetik, sosial-ekonomi, dan teknologi hasil ternak.")
+    st.caption("Kerangka ini memastikan Decision Support System Ternak tidak hanya menjawab budidaya, tetapi juga pakan, produksi, reproduksi/genetik, sosial-ekonomi, dan teknologi hasil ternak.")
     cols = st.columns(5)
     for col, dept in zip(cols, UGM_DEPARTMENTS):
         with col:
@@ -1522,7 +1522,7 @@ def render_ai_insights(selected_model_id: str, selected_fallback_models: List[st
         st.download_button(
             "Download Insight JSON",
             data=json.dumps(export_payload, ensure_ascii=False, indent=2),
-            file_name="ai-insight-pakar-ternak.json",
+            file_name="dss-ternak-ai-insight.json",
             mime="application/json",
             width="stretch",
         )
@@ -1653,7 +1653,7 @@ def render_profile() -> None:
 
 def render_chat(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
     st.header("Chat Pakar")
-    st.caption("Jawaban memakai persona AI Pakar Ternak dan konteks profil farm, catatan performa, serta kalender yang tersedia.")
+    st.caption("Jawaban memakai persona Decision Support System Ternak dan konteks profil farm, catatan performa, serta kalender yang tersedia.")
 
     for item in st.session_state.messages:
         with st.chat_message(item["role"]):
@@ -2307,7 +2307,7 @@ def render_management_report() -> None:
         {"formula_selected": st.session_state.get("formula_selected", []), "decision_log": st.session_state.get("decision_log", [])},
     )
     report = f"""
-# Laporan Manajemen AI Pakar Ternak
+# Laporan Manajemen Decision Support System Ternak
 
 Tanggal: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
@@ -2366,7 +2366,7 @@ Developed by Galuh Adi Insani (Fakultas Peternakan UGM)
         except Exception as error:
             st.error(f"Gagal membuat PDF: {error}")
     with col_md:
-        st.download_button("Download Laporan Markdown", data=report, file_name="laporan-manajemen-pakar-ternak.md", mime="text/markdown", width="stretch")
+        st.download_button("Download Laporan Markdown", data=report, file_name="laporan-manajemen-dss-ternak.md", mime="text/markdown", width="stretch")
     with col_xlsx:
         try:
             if st.button("Siapkan XLSX", width="stretch", key="report_prepare_xlsx"):
@@ -2818,7 +2818,7 @@ core_memory_table = "ai_pakar_ternak_core_memory""".strip(),
 
 def render_database_supabase_page() -> None:
     st.header("Database Supabase")
-    st.caption("Tes koneksi, simpan sesi, dan pulihkan data AI Pakar Ternak dari Supabase PostgreSQL.")
+    st.caption("Tes koneksi, simpan sesi, dan pulihkan data Decision Support System Ternak dari Supabase PostgreSQL.")
 
     st.info(
         "Urutan penggunaan: 1) isi Secrets di Streamlit, 2) reboot app, 3) masuk Admin Mode, "
@@ -2910,8 +2910,8 @@ def render_notification_center() -> None:
         _enterprise_state(),
     )
     messages = notification_messages(summary)
-    default_subject = "Laporan / Peringatan AI Pakar Ternak"
-    default_body = "AI Pakar Ternak - Ringkasan Notifikasi\n\n" + "\n".join(f"- {msg}" for msg in messages)
+    default_subject = "Laporan / Peringatan Decision Support System Ternak"
+    default_body = "Decision Support System Ternak - Ringkasan Notifikasi\n\n" + "\n".join(f"- {msg}" for msg in messages)
 
     with st.expander("Preview pesan yang akan dikirim", expanded=True):
         st.text_area("Isi pesan", value=default_body, height=180, key="notification_message_body")
@@ -2987,7 +2987,7 @@ def render_audit_trail_center() -> None:
         st.dataframe(list(reversed(state["audit_trail"][-200:])), width="stretch", hide_index=True)
     else:
         st.info("Belum ada audit trail enterprise.")
-    st.download_button("Download Laporan Enterprise Markdown", data=enterprise_report_markdown(normalise_profile(st.session_state.farm_profile), st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case, st.session_state.biosecurity_checked, state), file_name="laporan-enterprise-ai-pakar-ternak.md", mime="text/markdown", width="stretch")
+    st.download_button("Download Laporan Enterprise Markdown", data=enterprise_report_markdown(normalise_profile(st.session_state.farm_profile), st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case, st.session_state.biosecurity_checked, state), file_name="laporan-enterprise-decision-support-system-ternak.md", mime="text/markdown", width="stretch")
 
 
 def render_enterprise_center(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
@@ -3070,7 +3070,7 @@ selected_temperature = float(client.temperature)
 prefer_ai = True
 max_history_messages = max_history_messages_default
 
-st.title("🐄 AI Pakar Ternak")
+st.title("🐄 Decision Support System Ternak")
 st.caption("Asisten keputusan peternakan hulu–hilir: nutrisi, produksi, sosial-ekonomi, teknologi hasil, pemuliaan-reproduksi, insight, dan backup data.")
 clear_prepared_downloads_if_stale()
 
@@ -3150,7 +3150,7 @@ with st.sidebar:
                 st.download_button(
                     "Download Backup XLSX",
                     data=st.session_state.prepared_xlsx_bytes,
-                    file_name=st.session_state.prepared_xlsx_name or "ai-pakar-ternak-backup.xlsx",
+                    file_name=st.session_state.prepared_xlsx_name or "decision-support-system-ternak-backup.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     width="stretch",
                     key="sidebar_download_xlsx_prepared",
@@ -3159,7 +3159,7 @@ with st.sidebar:
                     st.download_button(
                         "Download Laporan PDF",
                         data=st.session_state.prepared_pdf_bytes,
-                        file_name=st.session_state.prepared_pdf_name or "ai-pakar-ternak-laporan.pdf",
+                        file_name=st.session_state.prepared_pdf_name or "decision-support-system-ternak-laporan.pdf",
                         mime="application/pdf",
                         width="stretch",
                         key="sidebar_download_pdf_report",
@@ -3200,7 +3200,7 @@ with st.sidebar:
                 st.download_button(
                     "Download Database XLSX Sebelum Hapus",
                     data=st.session_state.prepared_xlsx_bytes,
-                    file_name=st.session_state.prepared_xlsx_name or "ai-pakar-ternak-backup.xlsx",
+                    file_name=st.session_state.prepared_xlsx_name or "decision-support-system-ternak-backup.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     width="stretch",
                     key="download_before_delete_xlsx",
@@ -3230,7 +3230,7 @@ with st.sidebar:
             st.download_button(
                 "Download JSON",
                 data=export_app_json(),
-                file_name="ai-pakar-ternak-data.json",
+                file_name="decision-support-system-ternak-data.json",
                 mime="application/json",
                 width="stretch",
             )

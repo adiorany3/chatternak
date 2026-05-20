@@ -16,7 +16,7 @@ from farm_memory import memory_table_rows, normalise_memory_items
 from enterprise_features import normalise_enterprise_state, executive_summary, early_warnings, finance_snapshot, downstream_guidance, kpi_standard_for
 from feed_formulation import feed_catalog_rows
 
-APP_NAME = "AI Pakar Ternak"
+APP_NAME = "Decision Support System Ternak"
 STORAGE_VERSION = "2.0"
 
 HEADER_FILL = "166534"
@@ -226,7 +226,7 @@ def session_filename(payload: Dict[str, Any]) -> str:
     safe_name = "".join(ch if ch.isalnum() else "-" for ch in farm_name).strip("-") or "farm"
     date_code = datetime.now().strftime("%Y%m%d-%H%M")
     session_id = str(payload.get("session_id") or "sesi")[:8]
-    return f"pakar-ternak-{safe_name}-{date_code}-{session_id}.xlsx"
+    return f"dss-ternak-{safe_name}-{date_code}-{session_id}.xlsx"
 
 
 def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None = None) -> bytes:
@@ -248,7 +248,7 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
     ws = _sheet_title(wb, "Ringkasan")
     _style_title(
         ws,
-        "AI Pakar Ternak - Backup XLSX",
+        "Decision Support System Ternak - Backup XLSX",
         "File ini dibuat otomatis agar data farm tetap dapat dibaca, disimpan, dan diunggah kembali meskipun sesi Streamlit Online berakhir.",
     )
     summary_rows = [

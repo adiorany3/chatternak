@@ -1,4 +1,4 @@
-# AI Pakar Ternak
+# Decision Support System Ternak
 
 Aplikasi Streamlit berbasis AI untuk membantu peternak rakyat dan pengelola farm modern dalam konsultasi peternakan dari hulu sampai hilir: nutrisi-pakan, produksi, sosial-ekonomi/agribisnis, teknologi hasil ternak, pemuliaan-reproduksi, kesehatan, recording performa, SOP, biosecurity, prediksi usaha, insight AI, backup XLSX, dan laporan PDF.
 
@@ -7,7 +7,7 @@ Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 ## Fitur Utama
 
 ### Chat dan AI
-- Persona kuat sebagai **AI Pakar Ternak** dengan format jawaban pakar, aturan kesehatan, template komoditas, dan katalog bangsa/ras/strain ternak.
+- Persona kuat sebagai **Decision Support System Ternak** dengan format jawaban pakar, aturan kesehatan, template komoditas, dan katalog bangsa/ras/strain ternak.
 - Integrasi API OpenAI-compatible via `https://api.slashai.my.id/v1/chat/completions`.
 - API key aman lewat **Streamlit Secrets**, bukan `config.toml`.
 - Default model murah, dengan fallback model otomatis.
@@ -167,7 +167,7 @@ Contoh Secrets tambahan:
 
 ```toml
 [expert_memory]
-organization_context = "AI Pakar Ternak digunakan untuk mendukung keputusan peternakan hulu-hilir berstandar akademik dan industri."
+organization_context = "Decision Support System Ternak digunakan untuk mendukung keputusan peternakan hulu-hilir berstandar akademik dan industri."
 strategic_role = "Jawaban harus sesuai kebutuhan pimpinan/direktur utama: ringkas, berbasis risiko, KPI, biaya, prioritas, dan rencana eksekusi."
 notes = [
   "Selalu bedakan rekomendasi untuk peternak rakyat dan industri modern.",
@@ -394,7 +394,7 @@ Jika Supabase belum dikonfigurasi, aplikasi tetap berjalan memakai local temp sa
 
 Setelah Secrets disimpan dan aplikasi di-reboot:
 
-1. Buka aplikasi **AI Pakar Ternak**.
+1. Buka aplikasi **Decision Support System Ternak**.
 2. Pilih menu utama **Database Supabase**.
 3. Masukkan **Kunci admin** jika belum login Admin Mode.
 4. Klik **Tes Koneksi Database**.

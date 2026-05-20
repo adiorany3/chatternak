@@ -11,7 +11,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 APP_NAME = "Pakar Ternak Nusantara"
-STORAGE_VERSION = "1.1"
+STORAGE_VERSION = "1.2"
 
 HEADER_FILL = "166534"
 SUBHEADER_FILL = "DCFCE7"
@@ -58,6 +58,7 @@ HEALTH_HEADERS = ["Kolom", "Isi"]
 INSIGHT_HEADERS = ["Kolom", "Isi"]
 USAGE_HEADERS = ["Metrik", "Nilai"]
 FORMULA_HEADERS = ["No", "Bahan Pakan Terpilih"]
+DECISION_LOG_HEADERS = ["Tanggal", "Pertanyaan/Masalah", "Keputusan Utama", "Prioritas", "Level Risiko", "Skor Risiko", "Sumber", "Model", "Status Tindak Lanjut", "Catatan Hasil"]
 
 
 def _json_default(value: Any) -> str:
@@ -407,6 +408,34 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
     pred_rows = [(k, v) for k, v in (prediction or {}).items()] if isinstance(prediction, dict) else [("content", str(prediction))]
     _write_key_value_sheet(ws, "Prediksi Usaha Terakhir", pred_rows, "Prediksi stok pakan, panen, dan estimasi usaha terakhir.")
 
+    # Log keputusan AI
+    decision_log = app_state.get("decision_log", []) if isinstance(app_state, dict) else []
+    ws = _sheet_title(wb, "Log_Keputusan_AI")
+    _style_title(ws, "Log Keputusan AI", "Ringkasan keputusan/rekomendasi penting agar peternak dapat mengevaluasi tindak lanjut tanpa membuka aplikasi.")
+    header_row = 4
+    for col, header in enumerate(DECISION_LOG_HEADERS, start=1):
+        ws.cell(header_row, col, header)
+    _style_table(ws, header_row, len(DECISION_LOG_HEADERS))
+    if decision_log:
+        for r_idx, item in enumerate(decision_log, start=header_row + 1):
+            if not isinstance(item, dict):
+                continue
+            ws.cell(r_idx, 1, item.get("created_at", ""))
+            ws.cell(r_idx, 2, item.get("question", ""))
+            ws.cell(r_idx, 3, item.get("main_decision", ""))
+            ws.cell(r_idx, 4, item.get("priority", ""))
+            ws.cell(r_idx, 5, item.get("risk_level", ""))
+            ws.cell(r_idx, 6, item.get("risk_score", ""))
+            ws.cell(r_idx, 7, item.get("source", ""))
+            ws.cell(r_idx, 8, item.get("model", ""))
+            ws.cell(r_idx, 9, item.get("follow_up_status", ""))
+            ws.cell(r_idx, 10, item.get("result_note", ""))
+    else:
+        ws.cell(header_row + 1, 1, "Belum ada log keputusan AI.")
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(DECISION_LOG_HEADERS))
+    _set_widths(ws, {"A": 20, "B": 42, "C": 54, "D": 16, "E": 16, "F": 12, "G": 14, "H": 22, "I": 24, "J": 36})
+    _auto_filter(ws, header_row, len(DECISION_LOG_HEADERS))
+
     # Pemakaian AI
     ws = _sheet_title(wb, "Pemakaian_AI")
     _write_key_value_sheet(ws, "Pemakaian AI Sesi", [(k, v) for k, v in usage.items()], "Estimasi pemakaian AI selama sesi aktif.")
@@ -548,6 +577,27 @@ def import_session_xlsx(file_or_bytes: Any) -> Dict[str, Any]:
             value = ws.cell(row, 2).value
             if value and not str(value).startswith("Belum"):
                 payload["formula_selected"].append(str(value))
+
+    if "Log_Keputusan_AI" in wb.sheetnames:
+        ws = wb["Log_Keputusan_AI"]
+        decision_log = []
+        for row in range(5, ws.max_row + 1):
+            first = ws.cell(row, 1).value
+            if not first or str(first).startswith("Belum"):
+                continue
+            decision_log.append({
+                "created_at": str(first),
+                "question": str(ws.cell(row, 2).value or ""),
+                "main_decision": str(ws.cell(row, 3).value or ""),
+                "priority": str(ws.cell(row, 4).value or ""),
+                "risk_level": str(ws.cell(row, 5).value or ""),
+                "risk_score": _as_number(ws.cell(row, 6).value),
+                "source": str(ws.cell(row, 7).value or ""),
+                "model": str(ws.cell(row, 8).value or ""),
+                "follow_up_status": str(ws.cell(row, 9).value or ""),
+                "result_note": str(ws.cell(row, 10).value or ""),
+            })
+        payload.setdefault("app_state", {})["decision_log"] = decision_log
 
     if "Pemakaian_AI" in wb.sheetnames:
         ws = wb["Pemakaian_AI"]

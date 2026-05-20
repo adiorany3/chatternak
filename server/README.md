@@ -7,11 +7,15 @@ Footer aplikasi: **Developed by Galuh Adi Insani**.
 ## Fitur Utama
 
 ### Chat dan AI
-- Persona kuat sebagai **Pakar Ternak Nusantara**.
+- Persona kuat sebagai **Pakar Ternak Nusantara** dengan format jawaban pakar, aturan kesehatan, dan template komoditas.
 - Integrasi API OpenAI-compatible via `https://api.slashai.my.id/v1/chat/completions`.
 - API key aman lewat **Streamlit Secrets**, bukan `config.toml`.
 - Default model murah, dengan fallback model otomatis.
-- Chat history, profil farm, catatan performa, kalender, kasus kesehatan, dan insight dikirim sebagai konteks AI.
+- Chat history, profil farm, catatan performa, kalender, kasus kesehatan, insight, skor risiko, dan preferensi pengguna dikirim sebagai konteks AI.
+- Validator jawaban AI akan meminta perbaikan otomatis jika jawaban terlalu umum, kurang tindakan, atau berisiko pada kasus kesehatan.
+- AI dapat bertanya balik maksimal 5 pertanyaan penting jika data kasus belum cukup.
+- Tombol ubah jawaban: **Lebih sederhana**, **Langkah lapangan**, **Versi teknis**, dan **Buat SOP**.
+- Log keputusan AI tersimpan agar rekomendasi dapat ditindaklanjuti dan dievaluasi.
 - Mode pengguna:
   - **Peternak Rakyat**: bahasa sederhana dan bertahap.
   - **Industri Modern**: KPI, SOP, audit trail, FCR, ADG, mortalitas, biaya, dan risiko operasional.
@@ -49,6 +53,7 @@ Footer aplikasi: **Developed by Galuh Adi Insani**.
   - SOP_Terakhir
   - Prediksi_Usaha
   - Pemakaian_AI
+  - Log_Keputusan_AI
   - RAW_JSON tersembunyi untuk restore data
 
 
@@ -93,6 +98,7 @@ health_triage.py
 feed_formulation.py
 ai_insights.py
 decision_support.py
+expert_rules.py
 session_storage.py
 model_catalog.py
 models.toml

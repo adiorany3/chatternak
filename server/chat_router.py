@@ -7,6 +7,7 @@ import random
 from calculators import detect_tool_response
 from domain_data import DOMAIN_TERMS, FARMING_KNOWLEDGE, INTENTS
 from persona import SHORT_CONTEXT, SYSTEM_PROMPT, OFF_DOMAIN_RESPONSE
+from expert_rules import validate_ai_answer, repair_prompt
 from openai_integration import OpenAIChatAPI
 from model_catalog import estimate_cost_rp
 from farm_profile import make_profile_context
@@ -107,6 +108,7 @@ def answer_message(
     records: List[Dict[str, Any]] | None = None,
     calendar_events: List[Dict[str, Any]] | None = None,
     extra_context: str = "",
+    user_mode: str = "Peternak Rakyat",
 ) -> Tuple[str, Dict[str, Any]]:
     """Router utama chat.
 
@@ -160,8 +162,46 @@ def answer_message(
                 models=models_catalog,
             )
         if result.get("success") and result.get("content"):
+            content = result["content"]
+            ok, issues = validate_ai_answer(content, message, user_mode)
+            meta["validation"] = {"ok": ok, "issues": issues, "repaired": False}
+            if not ok and len(content) < 6000:
+                repair_messages = build_messages(
+                    repair_prompt(message, content, issues, user_mode),
+                    history,
+                    max_history_messages=max_history_messages,
+                    profile=profile,
+                    records=records,
+                    calendar_events=calendar_events,
+                    extra_context=extra_context,
+                )
+                repair_result = client.generate_chat_completion_with_fallback(
+                    messages=repair_messages,
+                    temperature=temperature,
+                    model=selected_model,
+                    max_tokens=client.max_tokens,
+                    fallback_models=fallback_models,
+                )
+                meta["repair_attempts"] = repair_result.get("attempts", [])
+                repair_api_result = repair_result.get("result")
+                if repair_result.get("success") and repair_result.get("content"):
+                    content = repair_result["content"]
+                    meta["validation"] = {"ok": True, "issues": issues, "repaired": True}
+                    if repair_api_result:
+                        # Add repair tokens to the displayed usage/cost approximation.
+                        base_usage = dict(meta.get("usage", {}) or {})
+                        base_usage["prompt_tokens"] = int(base_usage.get("prompt_tokens", 0) or 0) + int(repair_api_result.prompt_tokens or 0)
+                        base_usage["completion_tokens"] = int(base_usage.get("completion_tokens", 0) or 0) + int(repair_api_result.completion_tokens or 0)
+                        base_usage["total_tokens"] = int(base_usage.get("total_tokens", 0) or 0) + int(repair_api_result.total_tokens or 0)
+                        meta["usage"] = base_usage
+                        meta["cost_rp"] = estimate_cost_rp(
+                            meta["model"],
+                            prompt_tokens=int(base_usage.get("prompt_tokens", 0) or 0),
+                            completion_tokens=int(base_usage.get("completion_tokens", 0) or 0),
+                            models=models_catalog,
+                        )
             meta["source"] = "ai"
-            return result["content"], meta
+            return content, meta
         meta["api_error"] = result.get("content", "API tidak berhasil memberikan jawaban.")
 
     local = get_local_knowledge_response(message)

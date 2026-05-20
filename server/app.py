@@ -57,6 +57,14 @@ from decision_support import (
 from model_catalog import format_model_option, format_rupiah, get_model_by_id, load_model_catalog
 from openai_integration import DEFAULT_CONFIG, OpenAIChatAPI
 from session_storage import build_session_payload, export_session_xlsx, import_session_xlsx, session_filename
+from expert_rules import (
+    build_expert_context,
+    decision_card_from_answer,
+    farm_risk_score,
+    rewrite_instruction,
+    TECHNICAL_GLOSSARY,
+    COMMODITY_TEMPLATES,
+)
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SESSION_BACKUP_DIR = Path(tempfile.gettempdir()) / "pakar_ternak_nusantara_sessions"
@@ -147,6 +155,8 @@ def init_state() -> None:
         "biosecurity_checked": [],
         "last_sop": {},
         "last_prediction": {},
+        "last_risk_score": {},
+        "decision_log": [],
         "education_progress": [],
         "farm_profile": dict(DEFAULT_PROFILE),
         "farm_records": [],
@@ -231,6 +241,8 @@ def build_current_session_payload() -> Dict[str, Any]:
             "biosecurity_checked": st.session_state.biosecurity_checked,
             "last_sop": st.session_state.last_sop,
             "last_prediction": st.session_state.last_prediction,
+            "last_risk_score": st.session_state.last_risk_score,
+            "decision_log": st.session_state.decision_log,
             "education_progress": st.session_state.education_progress,
         },
     )
@@ -277,6 +289,8 @@ def restore_session_from_payload(payload: Dict[str, Any]) -> None:
     st.session_state.biosecurity_checked = list(app_state.get("biosecurity_checked", []) or [])
     st.session_state.last_sop = dict(app_state.get("last_sop", {}) or {})
     st.session_state.last_prediction = dict(app_state.get("last_prediction", {}) or {})
+    st.session_state.last_risk_score = dict(app_state.get("last_risk_score", {}) or {})
+    st.session_state.decision_log = list(app_state.get("decision_log", []) or [])
     st.session_state.education_progress = list(app_state.get("education_progress", []) or [])
     st.session_state.session_request_count = int(float(usage.get("requests", 0) or 0))
     st.session_state.session_prompt_tokens = int(float(usage.get("prompt_tokens", 0) or 0))
@@ -470,6 +484,16 @@ def run_ai_consultation(prompt: str, selected_model_id: str, selected_fallback_m
             "Batas pemakaian sesi sudah tercapai. Tekan Reset untuk memulai sesi baru, atau minta admin menaikkan batas sesi.",
             {"source": "limit"},
         )
+    expert_context = build_expert_context(
+        user_mode=st.session_state.user_mode,
+        explanation_level=st.session_state.explanation_level,
+        profile=st.session_state.farm_profile,
+        records=st.session_state.farm_records,
+        calendar_events=st.session_state.farm_calendar_events,
+        health_case=st.session_state.last_health_case,
+        biosecurity_checked=st.session_state.biosecurity_checked,
+        user_message=prompt,
+    )
     return answer_message(
         message=prompt,
         history=st.session_state.messages,
@@ -483,9 +507,9 @@ def run_ai_consultation(prompt: str, selected_model_id: str, selected_fallback_m
         profile=st.session_state.farm_profile,
         records=st.session_state.farm_records,
         calendar_events=st.session_state.farm_calendar_events,
-        extra_context=(audience_context(st.session_state.user_mode, st.session_state.explanation_level) + "\n" + extra_context).strip(),
+        extra_context=(audience_context(st.session_state.user_mode, st.session_state.explanation_level) + "\n" + expert_context + "\n" + extra_context).strip(),
+        user_mode=st.session_state.user_mode,
     )
-
 
 def render_ai_trace(meta: Dict[str, Any]) -> None:
     if not (
@@ -512,12 +536,141 @@ def render_ai_trace(meta: Dict[str, Any]) -> None:
     st.caption(" · ".join(caption_parts))
 
 
+def append_decision_log(question: str, answer: str, meta: Dict[str, Any]) -> None:
+    if not answer or meta.get("source") not in {"ai", "local_knowledge", "tool"}:
+        return
+    risk = farm_risk_score(
+        st.session_state.farm_profile,
+        st.session_state.farm_records,
+        st.session_state.farm_calendar_events,
+        st.session_state.last_health_case,
+        st.session_state.biosecurity_checked,
+    )
+    st.session_state.last_risk_score = risk
+    card = decision_card_from_answer(question, answer, risk)
+    card["source"] = meta.get("source", "")
+    card["model"] = meta.get("model", "")
+    log = list(st.session_state.get("decision_log", []) or [])
+    log.append(card)
+    st.session_state.decision_log = log[-100:]
+
+
+def render_decision_card_from_last() -> None:
+    log = st.session_state.get("decision_log", []) or []
+    if not log:
+        return
+    last = log[-1]
+    with st.expander("Kartu Keputusan AI", expanded=False):
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Prioritas", last.get("priority", "-"))
+        c2.metric("Risiko", last.get("risk_level", "-"))
+        c3.metric("Skor", last.get("risk_score", 0))
+        st.write(f"**Masalah/pertanyaan:** {last.get('question', '-')}")
+        st.write(f"**Keputusan utama:** {last.get('main_decision', '-')}")
+        st.caption("Kartu ini otomatis masuk ke Log Keputusan dan backup XLSX.")
+
+
+def render_answer_rewrite_tools(
+    selected_model_id: str,
+    selected_fallback_models: List[str],
+    selected_temperature: float,
+    max_history_messages: int,
+    prefer_ai: bool,
+) -> None:
+    if not st.session_state.messages or st.session_state.messages[-1].get("role") != "assistant":
+        return
+    last_answer = st.session_state.messages[-1].get("content", "")
+    st.caption("Ubah gaya jawaban terakhir:")
+    c1, c2, c3, c4 = st.columns(4)
+    actions = [
+        (c1, "simple", "Lebih sederhana"),
+        (c2, "field_steps", "Langkah lapangan"),
+        (c3, "technical", "Versi teknis"),
+        (c4, "sop", "Buat SOP"),
+    ]
+    for col, style, label in actions:
+        if col.button(label, key=f"rewrite_{style}", use_container_width=True):
+            prompt = rewrite_instruction(style, last_answer)
+            with st.spinner("Menyusun ulang jawaban..."):
+                response, meta = run_ai_consultation(
+                    prompt,
+                    selected_model_id,
+                    selected_fallback_models,
+                    selected_temperature,
+                    max_history_messages,
+                    prefer_ai,
+                    extra_context="Jawaban terakhir yang harus ditulis ulang:\n" + last_answer,
+                )
+            st.session_state.messages.append({"role": "user", "content": f"[{label}]"})
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            update_usage(meta)
+            append_decision_log(prompt, response, meta)
+            st.rerun()
+
+
+def render_risk_score_panel() -> None:
+    risk = farm_risk_score(
+        st.session_state.farm_profile,
+        st.session_state.farm_records,
+        st.session_state.farm_calendar_events,
+        st.session_state.last_health_case,
+        st.session_state.biosecurity_checked,
+    )
+    st.session_state.last_risk_score = risk
+    cols = st.columns([1, 1, 2])
+    cols[0].metric("Skor Risiko", f"{risk['score']}/100")
+    cols[1].metric("Status", risk["level"])
+    cols[2].write("Prioritas: " + (risk["reasons"][0] if risk.get("reasons") else "Belum ada risiko besar."))
+    with st.expander("Detail dimensi risiko", expanded=False):
+        st.json(risk)
+
+
+def render_expert_persona_reference() -> None:
+    st.header("Persona & Aturan Pakar")
+    st.caption("Bagian ini menjelaskan standar berpikir AI agar jawaban terasa seperti ahli peternakan, bukan chatbot umum.")
+    st.subheader("Template komoditas")
+    animal = st.selectbox("Pilih komoditas", list(COMMODITY_TEMPLATES.keys()))
+    template = COMMODITY_TEMPLATES[animal]
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**KPI utama**")
+        for item in template["kpi"]:
+            st.write(f"- {item}")
+        st.markdown("**Cek harian**")
+        for item in template["daily_check"]:
+            st.write(f"- {item}")
+    with c2:
+        st.markdown("**Pertanyaan kritis**")
+        for item in template["critical_questions"]:
+            st.write(f"- {item}")
+        st.markdown("**Tanda bahaya**")
+        for item in template["red_flags"]:
+            st.write(f"- {item}")
+    st.subheader("Kamus istilah sederhana")
+    for term, meaning in TECHNICAL_GLOSSARY.items():
+        st.write(f"**{term.upper()}** — {meaning}")
+
+
+def render_decision_log() -> None:
+    st.header("Log Keputusan AI")
+    st.caption("Setiap rekomendasi penting disimpan agar bisa dievaluasi di XLSX.")
+    log = st.session_state.get("decision_log", []) or []
+    if not log:
+        st.info("Belum ada keputusan AI yang tercatat.")
+        return
+    st.dataframe(log, use_container_width=True, hide_index=True)
+    if st.button("Kosongkan Log Keputusan", use_container_width=True):
+        st.session_state.decision_log = []
+        st.rerun()
+
+
 def render_dashboard() -> None:
     profile = normalise_profile(st.session_state.farm_profile)
     summary = summarize_records(st.session_state.farm_records)
     completeness = profile_completeness(profile)
 
     st.header("Dashboard Farm")
+    render_risk_score_panel()
     scorecard = build_scorecard(profile, st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case)
     insights = local_operational_insights(profile, st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case)
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -628,6 +781,7 @@ def render_ai_insights(selected_model_id: str, selected_fallback_models: List[st
                 "scorecard": scorecard,
             }
             update_usage(meta)
+            append_decision_log("AI Insight Farm", response, meta)
             st.subheader("Insight AI Lengkap")
             st.markdown(response)
             render_ai_trace(meta)
@@ -698,6 +852,8 @@ def render_chat(selected_model_id: str, selected_fallback_models: List[str], sel
         with st.chat_message(item["role"]):
             st.markdown(item["content"])
 
+    render_answer_rewrite_tools(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+
     prompt = st.chat_input("Tanyakan masalah peternakan Anda...")
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -712,10 +868,12 @@ def render_chat(selected_model_id: str, selected_fallback_models: List[str], sel
             else:
                 st.markdown(response)
                 update_usage(meta)
+                append_decision_log(prompt, response, meta)
                 render_ai_trace(meta)
 
         st.session_state.last_meta = meta
         st.session_state.messages.append({"role": "assistant", "content": response})
+        render_decision_card_from_last()
 
 
 def render_health_consultation(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
@@ -781,6 +939,8 @@ def render_health_consultation(selected_model_id: str, selected_fallback_models:
         st.subheader("Rekomendasi Pakar AI")
         st.markdown(response)
         update_usage(meta)
+        append_decision_log(prompt, response, meta)
+        render_decision_card_from_last()
         render_ai_trace(meta)
 
 
@@ -1114,7 +1274,9 @@ def render_guided_consultation(selected_model_id: str, selected_fallback_models:
                     extra_context=guided_case_context(topic, case),
                 )
             update_usage(meta)
+            append_decision_log(prompt, response, meta)
             st.markdown(response)
+            render_decision_card_from_last()
             render_ai_trace(meta)
 
 
@@ -1145,7 +1307,9 @@ def render_benchmark_kpi(selected_model_id: str, selected_fallback_models: List[
                 extra_context="Benchmark KPI:\n" + json.dumps(benchmark, ensure_ascii=False, indent=2),
             )
         update_usage(meta)
+        append_decision_log("Analisis KPI farm", response, meta)
         st.markdown(response)
+        render_decision_card_from_last()
         render_ai_trace(meta)
 
 
@@ -1196,8 +1360,10 @@ def render_sop_biosecurity(selected_model_id: str, selected_fallback_models: Lis
                     extra_context=f"SOP awal:\n{local_sop}\n\nBiosecurity score:\n{json.dumps(score, ensure_ascii=False)}",
                 )
             update_usage(meta)
+            append_decision_log("Perbaiki SOP dengan AI", response, meta)
             st.session_state.last_sop = {"type": sop_type, "content": response, "created_at": datetime.now().isoformat(timespec="seconds"), "biosecurity": score}
             st.markdown(response)
+            render_decision_card_from_last()
             render_ai_trace(meta)
 
 
@@ -1238,7 +1404,9 @@ def render_business_prediction(selected_model_id: str, selected_fallback_models:
                     extra_context="Prediksi usaha:\n" + json.dumps(st.session_state.last_prediction, ensure_ascii=False, indent=2),
                 )
             update_usage(meta)
+            append_decision_log("Insight AI Prediksi Usaha", response, meta)
             st.markdown(response)
+            render_decision_card_from_last()
             render_ai_trace(meta)
 
 
@@ -1386,12 +1554,13 @@ def render_decision_center(
 ) -> None:
     st.header("Insight & Keputusan")
     st.caption("Bagian ini dipakai setelah data farm terisi. Fokusnya adalah rekomendasi tindakan, efisiensi pakan, KPI, SOP, dan prediksi usaha.")
-    tab_insight, tab_feed, tab_kpi, tab_prediction, tab_sop = st.tabs([
+    tab_insight, tab_feed, tab_kpi, tab_prediction, tab_sop, tab_log = st.tabs([
         "AI Insight",
         "Formulasi Pakan",
         "Benchmark KPI",
         "Prediksi Usaha",
         "SOP & Biosecurity",
+        "Log Keputusan",
     ])
     with tab_insight:
         render_ai_insights(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
@@ -1403,6 +1572,8 @@ def render_decision_center(
         render_business_prediction(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
     with tab_sop:
         render_sop_biosecurity(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    with tab_log:
+        render_decision_log()
 
 
 def render_tools_center() -> None:
@@ -1420,13 +1591,15 @@ def render_tools_center() -> None:
 def render_learning_report_center() -> None:
     st.header("Edukasi & Laporan")
     st.caption("Bagian ini untuk membaca pengetahuan lokal, belajar bertahap, dan menyiapkan laporan yang dapat dibagikan.")
-    tab_library, tab_education, tab_report = st.tabs(["Library Lokal", "Edukasi", "Laporan"])
+    tab_library, tab_education, tab_report, tab_persona = st.tabs(["Library Lokal", "Edukasi", "Laporan", "Aturan Pakar"])
     with tab_library:
         render_local_library()
     with tab_education:
         render_education()
     with tab_report:
         render_management_report()
+    with tab_persona:
+        render_expert_persona_reference()
 
 
 def render_footer() -> None:

@@ -147,20 +147,11 @@ Filesystem Streamlit Online dapat hilang ketika app restart/redeploy. Karena itu
 Aplikasi ini memberi triase dan tindakan awal aman, bukan pengganti dokter hewan. Untuk kematian mendadak, banyak ternak sakit bersamaan, sesak napas, kejang, kembung parah, diare berdarah, atau kondisi darurat lain, segera hubungi dokter hewan/paramedik setempat.
 
 
-## Tampilan Light/Dark
+## Tampilan Light Paksa
 
-Aplikasi memakai `ui_theme.py` untuk menjaga keterbacaan pada tema Light maupun Dark Streamlit. Styling menggunakan variabel tema bawaan Streamlit (`--background-color`, `--secondary-background-color`, `--text-color`, dan `--primary-color`) sehingga kartu, tab, tombol, chat, metric, input, sidebar, dan footer mengikuti tema yang dipilih pengguna.
+Aplikasi dipaksa memakai tema **Light** melalui `.streamlit/config.toml`. Styling tambahan di `ui_theme.py` menjaga keterbacaan kartu, chat, metric, tombol, tab, expander, form input, sidebar, tabel, dan footer.
 
-Komponen penting yang sudah dioptimalkan:
-- kartu alur kerja;
-- chat message;
-- metric/scorecard;
-- tombol dan download button;
-- tab dan expander;
-- form input;
-- sidebar;
-- footer `Developed by Galuh Adi Insani`.
-
+Footer tetap: `Developed by Galuh Adi Insani`.
 
 ## Catatan versi hotfix TypeError
 
@@ -190,3 +181,15 @@ Aplikasi menyediakan laporan peternakan dalam format PDF siap cetak melalui menu
 
 PDF bersifat laporan baca/cetak. Untuk backup dan restore data, tetap gunakan file XLSX.
 
+
+
+## Hardening Streamlit Cloud
+
+Versi ini ditambahkan pengaman agar lebih stabil di Streamlit Online:
+
+- `streamlit>=1.57.0` agar parameter widget `width="stretch"` tersedia dan tidak lagi memakai `use_container_width` yang sudah deprecated.
+- Setiap menu utama dirender melalui safe wrapper, sehingga error di satu modul tidak langsung mematikan seluruh aplikasi.
+- Jika bagian tertentu error, aplikasi menampilkan tombol **Download Backup XLSX Darurat**.
+- Reset Chat, Reset Data Farm, dan Kosongkan Log Keputusan memakai nonce key agar tidak memicu error `st.session_state` setelah widget dibuat.
+- Generator XLSX dan PDF dibungkus dengan error handler.
+- Autosave menggunakan folder temp dan tidak dijadikan satu-satunya penyimpanan permanen. Backup utama tetap file XLSX yang diunduh pengguna.

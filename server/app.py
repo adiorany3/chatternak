@@ -4,6 +4,7 @@ import inspect
 import json
 import os
 import tempfile
+import traceback
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -70,7 +71,7 @@ from expert_rules import (
 )
 
 PROJECT_DIR = Path(__file__).resolve().parent
-SESSION_BACKUP_DIR = Path(tempfile.gettempdir()) / "pakar_ternak_nusantara_sessions"
+SESSION_BACKUP_DIR = Path(tempfile.gettempdir()) / "ai_pakar_ternak_sessions"
 
 st.set_page_config(
     page_title="AI Pakar Ternak",
@@ -171,12 +172,59 @@ def init_state() -> None:
         "formula_selected": ["rumput odot", "dedak", "ampas tahu", "mineral mix"],
         "confirm_reset_chat_nonce": 0,
         "confirm_reset_farm_nonce": 0,
+        "confirm_clear_log_nonce": 0,
         "reset_notice": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
+
+
+def safe_rerun() -> None:
+    """Rerun wrapper that stays compatible across Streamlit versions."""
+    if hasattr(st, "rerun"):
+        st.rerun()
+    elif hasattr(st, "experimental_rerun"):
+        st.experimental_rerun()
+
+
+def render_safe_error(section_name: str, error: Exception) -> None:
+    """Show a user-safe error without stopping the whole app."""
+    st.error(f"Bagian **{section_name}** mengalami kendala, tetapi aplikasi tetap berjalan.")
+    st.info("Silakan download Backup XLSX sebelum refresh atau mencoba kembali. Data yang sudah tersimpan di sesi masih dapat diekspor.")
+    try:
+        payload = build_current_session_payload()
+        st.download_button(
+            "Download Backup XLSX Darurat",
+            data=export_session_xlsx(payload),
+            file_name=session_filename(payload),
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            width="stretch",
+            key=f"emergency_backup_{section_name.replace(' ', '_').lower()}",
+        )
+    except Exception:
+        pass
+    if st.session_state.get("admin_authenticated", False):
+        with st.expander("Detail error admin", expanded=False):
+            st.code("".join(traceback.format_exception_only(type(error), error)).strip())
+
+
+def safe_render(section_name: str, render_func, *args, **kwargs) -> None:
+    """Render a section in a protective wrapper so one component error does not crash the app."""
+    try:
+        render_func(*args, **kwargs)
+    except Exception as error:
+        render_safe_error(section_name, error)
+
+
+def safe_build_bytes(label: str, builder, fallback: bytes = b"") -> bytes:
+    try:
+        return builder()
+    except Exception as error:
+        if st.session_state.get("admin_authenticated", False):
+            st.warning(f"Gagal membuat {label}: {error}")
+        return fallback
 
 def reset_chat() -> None:
     st.session_state.messages = []
@@ -415,12 +463,12 @@ def render_admin_panel(
     if not st.session_state.admin_authenticated:
         with st.form("admin_login_form", clear_on_submit=True):
             candidate = st.text_input("Kunci admin", type="password", placeholder="Masukkan kunci admin")
-            submitted = st.form_submit_button("Buka panel admin", use_container_width=True)
+            submitted = st.form_submit_button("Buka panel admin", width="stretch")
             if submitted:
                 if check_admin_password(candidate):
                     st.session_state.admin_authenticated = True
                     st.session_state.admin_login_error = ""
-                    st.rerun()
+                    safe_rerun()
                 else:
                     st.session_state.admin_login_error = "Kunci admin salah."
         if st.session_state.admin_login_error:
@@ -429,10 +477,10 @@ def render_admin_panel(
 
     st.success("Panel admin aktif")
     st.caption(f"Sumber kunci admin: {password_source}")
-    if st.button("Kunci kembali panel admin", use_container_width=True):
+    if st.button("Kunci kembali panel admin", width="stretch"):
         st.session_state.admin_authenticated = False
         st.session_state.admin_login_error = ""
-        st.rerun()
+        safe_rerun()
 
     st.divider()
     st.header("Status AI")
@@ -478,7 +526,7 @@ def render_admin_panel(
             f"{format_rupiah(float(limits_config.get('max_estimated_cost_rp_per_session', 2500)))} estimasi biaya."
         )
 
-    if st.button("Tes koneksi API", use_container_width=True):
+    if st.button("Tes koneksi API", width="stretch"):
         with st.spinner("Mengetes koneksi API..."):
             test = client.generate_response_with_fallback(
                 prompt="Balas tepat dengan kata: aktif",
@@ -641,7 +689,7 @@ def render_answer_rewrite_tools(
         (c4, "sop", "Buat SOP"),
     ]
     for col, style, label in actions:
-        if col.button(label, key=f"rewrite_{style}", use_container_width=True):
+        if col.button(label, key=f"rewrite_{style}", width="stretch"):
             prompt = rewrite_instruction(style, last_answer)
             with st.spinner("Menyusun ulang jawaban..."):
                 response, meta = run_ai_consultation(
@@ -657,7 +705,7 @@ def render_answer_rewrite_tools(
             st.session_state.messages.append({"role": "assistant", "content": response})
             update_usage(meta)
             append_decision_log(prompt, response, meta)
-            st.rerun()
+            safe_rerun()
 
 
 def render_risk_score_panel() -> None:
@@ -710,10 +758,18 @@ def render_decision_log() -> None:
     if not log:
         st.info("Belum ada keputusan AI yang tercatat.")
         return
-    st.dataframe(log, use_container_width=True, hide_index=True)
-    if st.button("Kosongkan Log Keputusan", use_container_width=True):
+    st.dataframe(log, width="stretch", hide_index=True)
+    st.warning("Sebelum menghapus log keputusan, pastikan Backup XLSX sudah diunduh.")
+    clear_log_key = f"confirm_clear_log_downloaded_{st.session_state.confirm_clear_log_nonce}"
+    clear_log_confirm = st.checkbox(
+        "Ya, saya sudah download database XLSX sebelum menghapus Log Keputusan.",
+        key=clear_log_key,
+    )
+    if st.button("Kosongkan Log Keputusan", width="stretch", disabled=not clear_log_confirm):
         st.session_state.decision_log = []
-        st.rerun()
+        st.session_state.confirm_clear_log_nonce += 1
+        st.session_state.reset_notice = "Log keputusan berhasil dikosongkan. Data lama dapat dipulihkan dari backup XLSX yang sudah diunduh."
+        safe_rerun()
 
 
 def render_dashboard() -> None:
@@ -757,7 +813,7 @@ def render_dashboard() -> None:
         st.subheader("Jadwal Terdekat")
         events = st.session_state.farm_calendar_events[:6]
         if events:
-            st.dataframe(events, use_container_width=True, hide_index=True)
+            st.dataframe(events, width="stretch", hide_index=True)
         else:
             st.caption("Belum ada jadwal. Buka menu Kalender Manajemen untuk membuat jadwal otomatis.")
 
@@ -796,7 +852,7 @@ def render_ai_insights(selected_model_id: str, selected_fallback_models: List[st
 
     col_a, col_b = st.columns([1, 1])
     with col_a:
-        generate = st.button("Buat Insight AI Lengkap", use_container_width=True)
+        generate = st.button("Buat Insight AI Lengkap", width="stretch")
     with col_b:
         export_payload = {
             "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -809,7 +865,7 @@ def render_ai_insights(selected_model_id: str, selected_fallback_models: List[st
             data=json.dumps(export_payload, ensure_ascii=False, indent=2),
             file_name="ai-insight-pakar-ternak.json",
             mime="application/json",
-            use_container_width=True,
+            width="stretch",
         )
 
     if generate:
@@ -872,7 +928,7 @@ def render_profile() -> None:
             budget_note = st.text_input("Catatan modal/biaya", value=p.get("budget_note", ""))
             market_target = st.text_input("Target pasar", value=p.get("market_target", ""))
 
-        saved = st.form_submit_button("Simpan profil", use_container_width=True)
+        saved = st.form_submit_button("Simpan profil", width="stretch")
         if saved:
             st.session_state.farm_profile = normalise_profile({
                 "farm_name": farm_name,
@@ -950,7 +1006,7 @@ def render_health_consultation(selected_model_id: str, selected_fallback_models:
             feed_water = st.text_area("Pakan dan air terakhir", value=p.get("feed_available", ""), height=90)
             housing = st.text_area("Kondisi kandang/kolam", value=p.get("housing_system", ""), height=90)
         symptoms = st.text_area("Gejala utama", placeholder="contoh: mencret, lemas, tidak mau makan, batuk, kembung, pincang, produksi telur turun", height=110)
-        submitted = st.form_submit_button("Analisis kesehatan", use_container_width=True)
+        submitted = st.form_submit_button("Analisis kesehatan", width="stretch")
 
     if submitted:
         case = {
@@ -1033,7 +1089,7 @@ def render_feed_formulation() -> None:
                 "type": str(info["type"]),
             })
 
-    if st.button("Evaluasi formula", use_container_width=True):
+    if st.button("Evaluasi formula", width="stretch"):
         st.markdown(formula_feedback(animal, phase, ingredients))
 
     if animal in {"sapi", "kambing"}:
@@ -1047,7 +1103,7 @@ def render_feed_formulation() -> None:
         st.dataframe([
             {"Bahan": k, "Jenis": v["type"], "Protein estimasi (%)": v["protein"], "Indeks energi": v["energy"]}
             for k, v in LOCAL_FEED_INGREDIENTS.items()
-        ], use_container_width=True, hide_index=True)
+        ], width="stretch", hide_index=True)
 
 
 def render_records() -> None:
@@ -1069,7 +1125,7 @@ def render_records() -> None:
         milk_liter = col8.number_input("Susu (liter)", min_value=0.0, value=0.0, step=0.1)
         note = st.text_area("Catatan", placeholder="contoh: pakan diganti, hujan deras, ada 2 ekor batuk", height=80)
         sync_profile = st.checkbox("Sinkronkan populasi dan bobot ini ke profil", value=True)
-        submitted = st.form_submit_button("Simpan catatan", use_container_width=True)
+        submitted = st.form_submit_button("Simpan catatan", width="stretch")
 
     if submitted:
         record = {
@@ -1102,13 +1158,13 @@ def render_records() -> None:
     st.info(records_context(st.session_state.farm_records))
 
     if st.session_state.farm_records:
-        st.dataframe(st.session_state.farm_records, use_container_width=True, hide_index=True)
+        st.dataframe(st.session_state.farm_records, width="stretch", hide_index=True)
         st.download_button(
             "Download catatan performa JSON",
             data=json.dumps(st.session_state.farm_records, ensure_ascii=False, indent=2),
             file_name="catatan-performa-ternak.json",
             mime="application/json",
-            use_container_width=True,
+            width="stretch",
         )
 
 
@@ -1123,7 +1179,7 @@ def render_calendar() -> None:
     animal = col3.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="calendar_animal")
     phase = st.text_input("Fase ternak", value=p.get("phase", ""), key="calendar_phase")
 
-    if st.button("Buat jadwal otomatis", use_container_width=True):
+    if st.button("Buat jadwal otomatis", width="stretch"):
         st.session_state.farm_calendar_events = generate_management_events(animal, start_date, int(days), phase)
         st.success("Kalender manajemen dibuat dan akan menjadi konteks AI.")
 
@@ -1132,16 +1188,16 @@ def render_calendar() -> None:
             breeding_date = st.date_input("Tanggal kawin/IB", value=date.today(), key="breeding_date")
             dates = breeding_dates(animal, breeding_date)
             if dates:
-                st.dataframe([{"Kegiatan": k, "Tanggal": str(v)} for k, v in dates.items()], use_container_width=True, hide_index=True)
+                st.dataframe([{"Kegiatan": k, "Tanggal": str(v)} for k, v in dates.items()], width="stretch", hide_index=True)
 
     if st.session_state.farm_calendar_events:
-        st.dataframe(st.session_state.farm_calendar_events, use_container_width=True, hide_index=True)
+        st.dataframe(st.session_state.farm_calendar_events, width="stretch", hide_index=True)
         st.download_button(
             "Download kalender JSON",
             data=json.dumps(st.session_state.farm_calendar_events, ensure_ascii=False, indent=2),
             file_name="kalender-manajemen-ternak.json",
             mime="application/json",
-            use_container_width=True,
+            width="stretch",
         )
     else:
         st.info("Belum ada jadwal. Klik tombol buat jadwal otomatis.")
@@ -1297,7 +1353,7 @@ def render_guided_consultation(selected_model_id: str, selected_fallback_models:
                 updated_case[key] = st.text_area(label, value=str(case.get(key, "")), placeholder=placeholder, height=80)
             else:
                 updated_case[key] = st.text_input(label, value=str(case.get(key, "")), placeholder=placeholder)
-        submitted = st.form_submit_button("Simpan & Analisis Bertahap", use_container_width=True)
+        submitted = st.form_submit_button("Simpan & Analisis Bertahap", width="stretch")
 
     missing = guided_questions(topic, updated_case if submitted else case)
     if submitted:
@@ -1313,7 +1369,7 @@ def render_guided_consultation(selected_model_id: str, selected_fallback_models:
         else:
             st.success("Data utama sudah cukup untuk analisis awal.")
 
-        if st.button("Minta Rekomendasi AI dari Data Ini", use_container_width=True):
+        if st.button("Minta Rekomendasi AI dari Data Ini", width="stretch"):
             prompt = "Beri konsultasi bertahap sesuai data kasus. Jika data masih kurang, jawab dengan asumsi sementara dan pertanyaan lanjutan paling penting."
             with st.spinner("AI menyusun konsultasi bertahap..."):
                 response, meta = run_ai_consultation(
@@ -1347,7 +1403,7 @@ def render_benchmark_kpi(selected_model_id: str, selected_fallback_models: List[
         st.write(f"- {item}")
     if not st.session_state.farm_records:
         st.info("Tambahkan catatan performa minimal 2 tanggal agar ADG/FCR lebih bermakna.")
-    if st.button("Minta Analisis AI KPI", use_container_width=True):
+    if st.button("Minta Analisis AI KPI", width="stretch"):
         with st.spinner("AI menganalisis KPI farm..."):
             response, meta = run_ai_consultation(
                 "Analisis KPI farm ini dan berikan keputusan manajerial untuk peternak.",
@@ -1392,15 +1448,15 @@ def render_sop_biosecurity(selected_model_id: str, selected_fallback_models: Lis
         data=local_sop,
         file_name=f"sop-{sop_type.lower().replace(' ', '-')}.txt",
         mime="text/plain",
-        use_container_width=True,
+        width="stretch",
     )
     col_a, col_b = st.columns(2)
     with col_a:
-        if st.button("Simpan SOP ke Sesi", use_container_width=True):
+        if st.button("Simpan SOP ke Sesi", width="stretch"):
             st.session_state.last_sop = {"type": sop_type, "content": local_sop, "created_at": datetime.now().isoformat(timespec="seconds"), "biosecurity": score}
             st.success("SOP tersimpan ke sesi dan backup XLSX.")
     with col_b:
-        if st.button("Perbaiki SOP dengan AI", use_container_width=True):
+        if st.button("Perbaiki SOP dengan AI", width="stretch"):
             with st.spinner("AI menyesuaikan SOP dengan profil farm..."):
                 response, meta = run_ai_consultation(
                     "Perbaiki SOP berikut agar sesuai profil farm, skala usaha, risiko, dan mode pengguna.",
@@ -1430,7 +1486,7 @@ def render_business_prediction(selected_model_id: str, selected_fallback_models:
     with col2:
         sale_price = st.number_input("Harga jual target per ekor/unit (Rp)", min_value=0.0, value=0.0, step=1000.0)
         extra_cost = st.number_input("Biaya tersisa sampai panen (Rp)", min_value=0.0, value=0.0, step=10000.0)
-    if st.button("Hitung Prediksi", use_container_width=True):
+    if st.button("Hitung Prediksi", width="stretch"):
         result = predict_operations(st.session_state.farm_profile, st.session_state.farm_records, feed_stock, target_weight, sale_price, extra_cost)
         st.session_state.last_prediction = {"created_at": datetime.now().isoformat(timespec="seconds"), "input": {"feed_stock_kg": feed_stock, "target_weight_kg": target_weight, "sale_price_per_unit": sale_price, "extra_cost_rp": extra_cost}, "result": result}
         st.success("Prediksi tersimpan ke sesi.")
@@ -1444,7 +1500,7 @@ def render_business_prediction(selected_model_id: str, selected_fallback_models:
         st.json(result)
         if result["feed_stock_days"] < 7:
             st.warning("Stok pakan kurang dari 7 hari. Prioritaskan pengadaan agar konsumsi tidak turun.")
-        if st.button("Minta Insight AI Prediksi", use_container_width=True):
+        if st.button("Minta Insight AI Prediksi", width="stretch"):
             with st.spinner("AI membuat rekomendasi dari prediksi..."):
                 response, meta = run_ai_consultation(
                     "Analisis prediksi usaha, panen, dan stok pakan ini. Berikan keputusan 24 jam, 7 hari, dan 30 hari.",
@@ -1471,9 +1527,9 @@ def render_local_library() -> None:
         text = f"{name} {data.get('kategori','')} {data.get('ringkas','')} {data.get('catatan','')}".lower()
         if not query or query.lower() in text:
             rows.append({"Istilah": name, "Kategori": data.get("kategori", ""), "Ringkas": data.get("ringkas", ""), "Catatan": data.get("catatan", "")})
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width="stretch", hide_index=True)
     if rows:
-        st.download_button("Download Library JSON", data=json.dumps(rows, ensure_ascii=False, indent=2), file_name="library-lokal-peternakan.json", mime="application/json", use_container_width=True)
+        st.download_button("Download Library JSON", data=json.dumps(rows, ensure_ascii=False, indent=2), file_name="library-lokal-peternakan.json", mime="application/json", width="stretch")
 
 
 def render_education() -> None:
@@ -1490,7 +1546,7 @@ def render_education() -> None:
                 if lesson_id not in completed:
                     st.session_state.education_progress.append(lesson_id)
                 st.success("Materi ditandai selesai.")
-                st.rerun()
+                safe_rerun()
     total = sum(len(items) for items in EDUCATION_MODULES.values())
     st.metric("Progress belajar", f"{len(set(st.session_state.education_progress))}/{total} materi")
 
@@ -1549,15 +1605,24 @@ Developed by Galuh Adi Insani
                 data=generate_pdf_report(report_payload, report_context),
                 file_name=pdf_report_filename(report_payload),
                 mime="application/pdf",
-                use_container_width=True,
+                width="stretch",
                 key="report_download_pdf",
             )
         except Exception as error:
             st.error(f"Gagal membuat PDF: {error}")
     with col_md:
-        st.download_button("Download Laporan Markdown", data=report, file_name="laporan-manajemen-pakar-ternak.md", mime="text/markdown", use_container_width=True)
+        st.download_button("Download Laporan Markdown", data=report, file_name="laporan-manajemen-pakar-ternak.md", mime="text/markdown", width="stretch")
     with col_xlsx:
-        st.download_button("Download Backup Lengkap XLSX", data=get_session_xlsx_bytes(), file_name=session_filename(report_payload), mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        try:
+            st.download_button(
+                "Download Backup Lengkap XLSX",
+                data=get_session_xlsx_bytes(),
+                file_name=session_filename(report_payload),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                width="stretch",
+            )
+        except Exception as error:
+            st.error(f"Gagal membuat XLSX: {error}")
 
 def render_workflow_overview() -> None:
     st.subheader("Alur kerja sederhana")
@@ -1732,27 +1797,27 @@ with st.sidebar:
                 data=export_session_xlsx(xlsx_payload),
                 file_name=session_filename(xlsx_payload),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
+                width="stretch",
             )
             st.download_button(
                 "Download Laporan PDF",
                 data=generate_pdf_report(xlsx_payload, build_pdf_report_context()),
                 file_name=pdf_report_filename(xlsx_payload),
                 mime="application/pdf",
-                use_container_width=True,
+                width="stretch",
                 key="sidebar_download_pdf_report",
             )
         except Exception as error:
             st.error(f"Gagal membuat backup/laporan: {error}")
 
         restore_file = st.file_uploader("Pulihkan dari XLSX", type=["xlsx"], key="restore_xlsx_file")
-        if st.button("Pulihkan Data", use_container_width=True, disabled=restore_file is None):
+        if st.button("Pulihkan Data", width="stretch", disabled=restore_file is None):
             try:
                 restored = import_session_xlsx(restore_file)
                 restore_session_from_payload(restored)
                 autosave_session_xlsx()
                 st.success("Data berhasil dipulihkan dari XLSX.")
-                st.rerun()
+                safe_rerun()
             except Exception as error:
                 st.error(f"Gagal memulihkan XLSX: {error}")
 
@@ -1774,7 +1839,7 @@ with st.sidebar:
                 data=export_session_xlsx(confirm_payload),
                 file_name=session_filename(confirm_payload),
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
+                width="stretch",
                 key="download_before_delete_xlsx",
             )
         except Exception as error:
@@ -1782,7 +1847,6 @@ with st.sidebar:
 
         if st.session_state.reset_notice:
             st.success(st.session_state.reset_notice)
-            st.session_state.reset_notice = ""
 
         st.markdown("**Apakah database sudah Anda download?**")
         reset_chat_key = f"confirm_reset_chat_downloaded_{st.session_state.confirm_reset_chat_nonce}"
@@ -1792,18 +1856,18 @@ with st.sidebar:
         )
         col_a, col_b = st.columns(2)
         with col_a:
-            if st.button("Reset Chat", use_container_width=True, disabled=not reset_chat_confirm):
+            if st.button("Reset Chat", width="stretch", disabled=not reset_chat_confirm):
                 reset_chat()
                 st.session_state.confirm_reset_chat_nonce += 1
                 st.session_state.reset_notice = "Chat berhasil direset. Data dapat dipulihkan dari backup XLSX yang sudah diunduh."
-                st.rerun()
+                safe_rerun()
         with col_b:
             st.download_button(
                 "Download JSON",
                 data=export_app_json(),
-                file_name="pakar-ternak-nusantara-data.json",
+                file_name="ai-pakar-ternak-data.json",
                 mime="application/json",
-                use_container_width=True,
+                width="stretch",
             )
 
         if st.session_state.admin_authenticated:
@@ -1814,11 +1878,11 @@ with st.sidebar:
                 "Ya, saya sudah download database XLSX sebelum Reset Data Farm.",
                 key=reset_farm_key,
             )
-            if st.button("Reset Data Farm", use_container_width=True, disabled=not reset_farm_confirm):
+            if st.button("Reset Data Farm", width="stretch", disabled=not reset_farm_confirm):
                 reset_farm_data()
                 st.session_state.confirm_reset_farm_nonce += 1
                 st.session_state.reset_notice = "Data farm berhasil direset. Gunakan file XLSX untuk memulihkan data lama bila diperlukan."
-                st.rerun()
+                safe_rerun()
 
         (
             selected_model_id,
@@ -1829,17 +1893,25 @@ with st.sidebar:
         ) = render_admin_panel(model_ids, default_model, fallback_defaults, max_history_messages_default)
 
 if tool_option == "Beranda":
-    render_simple_home()
+    safe_render("Beranda", render_simple_home)
 elif tool_option == "Input Data":
-    render_input_data_center()
+    safe_render("Input Data", render_input_data_center)
 elif tool_option == "Konsultasi AI":
-    render_consultation_center(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    safe_render("Konsultasi AI", render_consultation_center, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Insight & Keputusan":
-    render_decision_center(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    safe_render("Insight & Keputusan", render_decision_center, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Alat Hitung":
-    render_tools_center()
+    safe_render("Alat Hitung", render_tools_center)
 elif tool_option == "Edukasi & Laporan":
-    render_learning_report_center()
+    safe_render("Edukasi & Laporan", render_learning_report_center)
 
-autosave_session_xlsx()
-render_footer()
+try:
+    autosave_session_xlsx()
+except Exception as error:
+    if st.session_state.get("admin_authenticated", False):
+        st.warning(f"Autosave tidak berhasil: {error}")
+
+try:
+    render_footer()
+except Exception:
+    st.caption("Developed by Galuh Adi Insani")

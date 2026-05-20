@@ -165,3 +165,13 @@ Komponen penting yang sudah dioptimalkan:
 ## Catatan versi hotfix TypeError
 
 Versi ini menambahkan pelindung kompatibilitas pada jalur `run_ai_consultation -> answer_message`, sehingga tombol rekomendasi AI pada Konsultasi Bertahap tidak berhenti jika ada mismatch parameter saat deployment Streamlit Cloud melakukan partial reload/cache.
+
+## Tampilan Light dan Pengamanan Hapus Data
+
+Aplikasi dipaksa memakai tema **Light** melalui `.streamlit/config.toml` dan styling `ui_theme.py` agar semua kartu, tabel, tombol, form, dan sidebar tetap mudah terbaca di Streamlit Cloud.
+
+Sebelum melakukan **Reset Chat** atau **Reset Data Farm**, aplikasi akan menanyakan:
+
+> Apakah database sudah Anda download?
+
+Tombol reset akan terkunci sampai pengguna mencentang konfirmasi bahwa Backup XLSX sudah diunduh. Ini mencegah data hilang ketika session Streamlit habis, app restart, atau data belum sempat dibackup.

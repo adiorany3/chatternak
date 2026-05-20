@@ -1717,22 +1717,55 @@ with st.sidebar:
         st.caption("Di Streamlit Online, backup utama tetap file XLSX yang diunduh peternak.")
 
     with st.expander("Data & Admin", expanded=False):
+        st.warning(
+            "Sebelum menghapus/reset data, pastikan database sesi sudah di-download sebagai Backup XLSX. "
+            "Tanpa file backup, data dapat hilang ketika session Streamlit habis atau app restart."
+        )
+        try:
+            confirm_payload = build_current_session_payload()
+            st.download_button(
+                "Download Database XLSX Sebelum Hapus",
+                data=export_session_xlsx(confirm_payload),
+                file_name=session_filename(confirm_payload),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="download_before_delete_xlsx",
+            )
+        except Exception as error:
+            st.error(f"Gagal membuat backup sebelum hapus: {error}")
+
+        st.markdown("**Apakah database sudah Anda download?**")
+        reset_chat_confirm = st.checkbox(
+            "Ya, saya sudah download database XLSX sebelum Reset Chat.",
+            key="confirm_reset_chat_downloaded",
+        )
         col_a, col_b = st.columns(2)
         with col_a:
-            if st.button("Reset Chat", use_container_width=True):
+            if st.button("Reset Chat", use_container_width=True, disabled=not reset_chat_confirm):
                 reset_chat()
+                st.session_state.confirm_reset_chat_downloaded = False
+                st.success("Chat berhasil direset. Data dapat dipulihkan dari backup XLSX yang sudah diunduh.")
                 st.rerun()
         with col_b:
             st.download_button(
-                "JSON",
+                "Download JSON",
                 data=export_app_json(),
                 file_name="pakar-ternak-nusantara-data.json",
                 mime="application/json",
                 use_container_width=True,
             )
+
         if st.session_state.admin_authenticated:
-            if st.button("Reset Data Farm", use_container_width=True):
+            st.divider()
+            st.markdown("**Hapus/reset data farm hanya untuk admin.**")
+            reset_farm_confirm = st.checkbox(
+                "Ya, saya sudah download database XLSX sebelum Reset Data Farm.",
+                key="confirm_reset_farm_downloaded",
+            )
+            if st.button("Reset Data Farm", use_container_width=True, disabled=not reset_farm_confirm):
                 reset_farm_data()
+                st.session_state.confirm_reset_farm_downloaded = False
+                st.success("Data farm berhasil direset. Gunakan file XLSX untuk memulihkan data lama bila diperlukan.")
                 st.rerun()
 
         (

@@ -121,7 +121,15 @@ from enterprise_features import (
     enterprise_context,
     enterprise_report_markdown,
 )
-from enterprise_storage import get_storage_config, save_payload as save_enterprise_payload, load_payload as load_enterprise_payload, test_connection as test_enterprise_database_connection
+from enterprise_storage import (
+    get_storage_config,
+    save_payload as save_enterprise_payload,
+    load_payload as load_enterprise_payload,
+    test_connection as test_enterprise_database_connection,
+    save_core_memory_items,
+    load_core_memory_items,
+    test_core_memory_connection,
+)
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SESSION_BACKUP_DIR = Path(tempfile.gettempdir()) / "ai_pakar_ternak_sessions"
@@ -221,6 +229,11 @@ def init_state() -> None:
         "decision_log": [],
         "education_progress": [],
         "expert_memory": [],
+        "supabase_core_memory": [],
+        "core_memory_loaded": False,
+        "core_memory_status": "",
+        "core_memory_last_sync": "",
+        "core_memory_auto_learning": True,
         "expert_memory_suggestions": [],
         "enterprise_state": dict(DEFAULT_ENTERPRISE_STATE),
         "farm_profile": dict(DEFAULT_PROFILE),
@@ -410,8 +423,14 @@ def build_current_session_payload() -> Dict[str, Any]:
             "decision_log": st.session_state.decision_log,
             "education_progress": st.session_state.education_progress,
             "expert_memory": normalise_memory_items(st.session_state.expert_memory),
+            "supabase_core_memory": normalise_memory_items(st.session_state.get("supabase_core_memory", [])),
+            "core_memory_last_sync": st.session_state.get("core_memory_last_sync", ""),
+            "core_memory_auto_learning": bool(st.session_state.get("core_memory_auto_learning", True)),
             "enterprise_state": normalise_enterprise_state(st.session_state.enterprise_state),
-            "active_memory_rows": memory_table_rows(st.session_state.expert_memory, get_secret_memory_items()),
+            "active_memory_rows": memory_table_rows(
+                normalise_memory_items(st.session_state.expert_memory) + normalise_memory_items(st.session_state.get("supabase_core_memory", [])),
+                get_secret_memory_items(),
+            ),
         },
     )
 
@@ -437,7 +456,10 @@ def build_pdf_report_context() -> Dict[str, Any]:
         "risk": farm_risk_score(profile, records, calendar_events, health_case, st.session_state.biosecurity_checked),
         "local_insights": local_operational_insights(profile, records, calendar_events, health_case),
         "department_coverage": department_coverage_check(profile, records, calendar_events, health_case, {"formula_selected": st.session_state.formula_selected, "decision_log": st.session_state.decision_log}),
-        "memory_rows": memory_table_rows(st.session_state.expert_memory, get_secret_memory_items()),
+        "memory_rows": memory_table_rows(
+            normalise_memory_items(st.session_state.expert_memory) + normalise_memory_items(st.session_state.get("supabase_core_memory", [])),
+            get_secret_memory_items(),
+        ),
         "enterprise_summary": executive_summary(profile, records, calendar_events, health_case, st.session_state.biosecurity_checked, st.session_state.enterprise_state),
         "enterprise_finance": finance_snapshot(profile, records, normalise_enterprise_state(st.session_state.enterprise_state).get("finance_transactions", [])),
         "enterprise_downstream": downstream_guidance(profile),
@@ -489,6 +511,8 @@ def restore_session_from_payload(payload: Dict[str, Any]) -> None:
     st.session_state.decision_log = list(app_state.get("decision_log", []) or [])
     st.session_state.education_progress = list(app_state.get("education_progress", []) or [])
     st.session_state.expert_memory = normalise_memory_items(app_state.get("expert_memory", []) or [])
+    st.session_state.supabase_core_memory = normalise_memory_items(app_state.get("supabase_core_memory", []) or [])
+    st.session_state.core_memory_auto_learning = bool(app_state.get("core_memory_auto_learning", st.session_state.get("core_memory_auto_learning", True)))
     st.session_state.enterprise_state = normalise_enterprise_state(app_state.get("enterprise_state", {}) or {})
     st.session_state.session_request_count = int(float(usage.get("requests", 0) or 0))
     st.session_state.session_prompt_tokens = int(float(usage.get("prompt_tokens", 0) or 0))
@@ -523,11 +547,145 @@ def get_secret_memory_items() -> List[Dict[str, Any]]:
 
 
 def get_active_memory_context() -> str:
+    dynamic = normalise_memory_items(st.session_state.get("expert_memory", []))
+    persistent = normalise_memory_items(st.session_state.get("supabase_core_memory", []))
     return memory_context(
-        st.session_state.get("expert_memory", []),
+        dynamic + persistent,
         get_secret_memory_items(),
         include_default=True,
     )
+
+
+def default_ai_core_memory_items() -> List[Dict[str, Any]]:
+    """Persona/skill/role default yang dapat disimpan permanen ke Supabase."""
+    return [
+        {
+            "kind": "persona",
+            "category": "Persona Ahli",
+            "priority": "Tinggi",
+            "memory": "AI Pakar Ternak harus bertindak sebagai konsultan peternakan hulu-hilir Indonesia yang menguasai nutrisi, produksi, reproduksi-pemuliaan, sosial-ekonomi, teknologi hasil, kesehatan, biosecurity, KPI, SOP, dan keputusan direksi.",
+            "source": "default_seed",
+        },
+        {
+            "kind": "role",
+            "category": "Peran Strategis",
+            "priority": "Tinggi",
+            "memory": "AI harus mampu menjawab kebutuhan peternak rakyat, manager farm, dokter hewan/konsultan, dan direktur utama perusahaan multinasional dengan bahasa yang sesuai level pengguna.",
+            "source": "default_seed",
+        },
+        {
+            "kind": "skill",
+            "category": "Keahlian Teknis",
+            "priority": "Tinggi",
+            "memory": "AI wajib membaca data farm memakai KPI seperti ADG, FCR, mortalitas, produksi telur/susu, feed cost, HPP, margin, biosecurity score, calving interval, dan readiness score bila data tersedia.",
+            "source": "default_seed",
+        },
+        {
+            "kind": "strategy",
+            "category": "Keputusan Direksi",
+            "priority": "Tinggi",
+            "memory": "Untuk level direksi, setiap insight harus ringkas, menyebut risiko, dampak biaya, prioritas, keputusan yang harus diambil, PIC/area kerja, dan target 7/30/90 hari.",
+            "source": "default_seed",
+        },
+        {
+            "kind": "policy",
+            "category": "Kesehatan dan Etika",
+            "priority": "Tinggi",
+            "memory": "Untuk kasus kesehatan, AI hanya memberi triase, tindakan aman, dan tanda bahaya. AI tidak boleh memberi diagnosis pasti atau dosis obat keras/antibiotik tanpa dokter hewan/paramedik.",
+            "source": "default_seed",
+        },
+    ]
+
+
+def core_memory_as_expert_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for item in items or []:
+        memory = str(item.get("memory") or "").strip()
+        if not memory:
+            continue
+        kind = str(item.get("kind") or "learning").strip()
+        rows.append(make_memory_item(
+            memory,
+            category=str(item.get("category") or f"AI Core {kind}"),
+            priority=str(item.get("priority") or "Sedang"),
+            source=str(item.get("source") or f"supabase_{kind}"),
+            created_at=str(item.get("updated_at") or item.get("created_at") or "") or None,
+        ))
+    return normalise_memory_items(rows)
+
+
+def load_core_memory_once(force: bool = False) -> None:
+    if st.session_state.get("core_memory_loaded") and not force:
+        return
+    try:
+        ok, items, msg = load_core_memory_items(st.secrets)
+        if ok:
+            st.session_state.supabase_core_memory = core_memory_as_expert_items(items)
+            st.session_state.core_memory_status = msg
+        else:
+            st.session_state.core_memory_status = msg
+        st.session_state.core_memory_loaded = True
+    except Exception as error:
+        st.session_state.core_memory_status = f"AI Core Memory belum dimuat: {error}"
+        st.session_state.core_memory_loaded = True
+
+
+def persist_core_memory_to_supabase(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    result = save_core_memory_items(items, st.secrets)
+    if result.get("ok"):
+        st.session_state.core_memory_last_sync = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        load_core_memory_once(force=True)
+    return result
+
+
+def learn_from_interaction(question: str, answer: str, meta: Dict[str, Any]) -> None:
+    """Simpan pembelajaran ringkas ke Supabase agar sesi berikutnya punya konteks lebih baik.
+
+    Ini bukan fine-tuning/model training. Data disimpan sebagai retrieval memory yang
+    diinjeksikan kembali ke prompt AI pada konsultasi berikutnya.
+    """
+    if not st.session_state.get("core_memory_auto_learning", True):
+        return
+    if meta.get("source") != "ai" or not answer:
+        return
+    profile = normalise_profile(st.session_state.farm_profile)
+    question_short = str(question or "").strip().replace("\n", " ")[:220]
+    answer_short = str(answer or "").strip().replace("\n", " ")[:420]
+    if len(answer_short) < 80:
+        return
+    memory = (
+        f"Pembelajaran kasus: komoditas {profile.get('animal_type', '-')}, "
+        f"bangsa/strain {profile.get('breed', '-')}, tujuan {profile.get('production_goal', '-')}. "
+        f"Pertanyaan: {question_short}. Rekomendasi inti: {answer_short}"
+    )
+    item = {
+        "kind": "learning",
+        "category": "Pembelajaran Kasus",
+        "priority": "Sedang",
+        "memory": memory,
+        "source": "auto_learning",
+        "metadata": {
+            "session_id": st.session_state.session_id,
+            "model": meta.get("model", ""),
+            "source": meta.get("source", ""),
+            "farm_profile": {
+                "animal_type": profile.get("animal_type", ""),
+                "breed": profile.get("breed", ""),
+                "production_goal": profile.get("production_goal", ""),
+                "phase": profile.get("phase", ""),
+            },
+        },
+    }
+    try:
+        result = save_core_memory_items([item], st.secrets)
+        if result.get("ok"):
+            current = normalise_memory_items(st.session_state.get("supabase_core_memory", []))
+            current.append(make_memory_item(memory, category="Pembelajaran Kasus", priority="Sedang", source="auto_learning"))
+            st.session_state.supabase_core_memory = normalise_memory_items(current)[-240:]
+            st.session_state.core_memory_last_sync = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    except Exception as error:
+        # Jangan sampai gagal menyimpan learning membuat konsultasi AI crash.
+        st.session_state.core_memory_status = f"Auto learning belum tersimpan: {error}"
 
 
 def add_expert_memory(memory: str, category: str = "Catatan Lapangan", priority: str = "Sedang", source: str = "manual") -> None:
@@ -598,13 +756,96 @@ def render_memory_admin() -> None:
     )
     secret_items = get_secret_memory_items()
     dynamic_items = normalise_memory_items(st.session_state.get("expert_memory", []))
-    rows = memory_table_rows(dynamic_items, secret_items, include_default=True)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Default + aktif", len(rows))
+    core_items = normalise_memory_items(st.session_state.get("supabase_core_memory", []))
+    rows = memory_table_rows(dynamic_items + core_items, secret_items, include_default=True)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Memory aktif", len(rows))
     c2.metric("Dari Secrets", len(secret_items))
-    c3.metric("Memory berkembang", len(dynamic_items))
+    c3.metric("Berkembang lokal", len(dynamic_items))
+    c4.metric("Supabase Core", len(core_items))
+    if st.session_state.get("core_memory_status"):
+        st.caption(st.session_state.core_memory_status)
+    if st.session_state.get("core_memory_last_sync"):
+        st.caption(f"Sync Core Memory terakhir: {st.session_state.core_memory_last_sync}")
     with st.expander("Lihat memory aktif", expanded=False):
         st.dataframe(rows, width="stretch", hide_index=True)
+
+    with st.expander("AI Core Memory Supabase: persona, skill, role, dan learning", expanded=False):
+        st.info(
+            "Bagian ini menyimpan persona, skill, role, strategi, dan pembelajaran kasus ke Supabase. "
+            "Ini bukan fine-tuning model, tetapi memory/RAG permanen yang dipakai kembali sebagai konteks AI setelah Streamlit restart."
+        )
+        st.session_state.core_memory_auto_learning = st.toggle(
+            "Auto learning: simpan ringkasan jawaban AI ke Supabase",
+            value=bool(st.session_state.get("core_memory_auto_learning", True)),
+            help="Jika aktif, jawaban AI yang relevan akan diringkas menjadi memory kasus agar konsultasi berikutnya makin kontekstual.",
+        )
+        ctest, cload = st.columns(2)
+        with ctest:
+            if st.button("Tes AI Core Memory", width="stretch"):
+                try:
+                    result = test_core_memory_connection(st.secrets)
+                    if result.get("ok"):
+                        st.success(result.get("message"))
+                    else:
+                        st.warning(result.get("message"))
+                except Exception as error:
+                    st.error(f"Tes AI Core Memory gagal: {error}")
+        with cload:
+            if st.button("Muat Memory dari Supabase", width="stretch"):
+                load_core_memory_once(force=True)
+                st.success(st.session_state.get("core_memory_status", "Memory dimuat."))
+                safe_rerun()
+
+        cseed, csync = st.columns(2)
+        with cseed:
+            if st.button("Simpan Persona/Skill/Role Default", width="stretch"):
+                try:
+                    result = persist_core_memory_to_supabase(default_ai_core_memory_items())
+                    if result.get("ok"):
+                        st.success(result.get("message"))
+                    else:
+                        st.warning(result.get("message"))
+                except Exception as error:
+                    st.error(f"Gagal menyimpan default core memory: {error}")
+        with csync:
+            if st.button("Simpan Memory Berkembang ke Supabase", width="stretch"):
+                try:
+                    payload = []
+                    for item in dynamic_items:
+                        payload.append({
+                            "kind": "learning",
+                            "category": item.get("category", "Catatan Lapangan"),
+                            "priority": item.get("priority", "Sedang"),
+                            "memory": item.get("memory", ""),
+                            "source": item.get("source", "admin_manual"),
+                            "metadata": {"session_id": st.session_state.session_id},
+                        })
+                    result = persist_core_memory_to_supabase(payload)
+                    if result.get("ok"):
+                        st.success(result.get("message"))
+                    else:
+                        st.warning(result.get("message"))
+                except Exception as error:
+                    st.error(f"Gagal menyimpan memory berkembang: {error}")
+
+        with st.expander("SQL tabel AI Core Memory", expanded=False):
+            st.code(
+                """CREATE TABLE IF NOT EXISTS ai_pakar_ternak_core_memory (
+    memory_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'learning',
+    category TEXT NOT NULL DEFAULT 'Catatan Lapangan',
+    priority TEXT NOT NULL DEFAULT 'Sedang',
+    memory TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'app',
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);""",
+                language="sql",
+            )
+            st.caption("Aplikasi juga dapat membuat tabel ini otomatis jika user database memiliki izin CREATE TABLE.")
     with st.form("add_expert_memory_form", clear_on_submit=True):
         category = st.selectbox("Kategori memory", MEMORY_CATEGORIES, index=MEMORY_CATEGORIES.index("Strategi Perusahaan"))
         priority = st.selectbox("Prioritas", PRIORITIES, index=0)
@@ -887,6 +1128,7 @@ def append_decision_log(question: str, answer: str, meta: Dict[str, Any]) -> Non
     log = list(st.session_state.get("decision_log", []) or [])
     log.append(card)
     st.session_state.decision_log = log[-100:]
+    learn_from_interaction(question, answer, meta)
 
 
 def render_decision_card_from_last() -> None:
@@ -2354,14 +2596,16 @@ database = "postgres"
 user = "postgres"
 password = "ISI_PASSWORD_DATABASE_SUPABASE"
 sslmode = "require"
-table = "ai_pakar_ternak_sessions""".strip(), language="toml")
+table = "ai_pakar_ternak_sessions"
+core_memory_table = "ai_pakar_ternak_core_memory""".strip(), language="toml")
         st.caption("Masukkan di Streamlit App settings → Secrets. Jangan simpan password database di repository publik.")
 
     with st.expander("Alternatif: DATABASE_URL", expanded=False):
         st.code("""[database]
 provider = "postgres"
 database_url = "postgresql://postgres:ISI_PASSWORD@db.huhezxjjnypthgbafmdv.supabase.co:5432/postgres?sslmode=require"
-table = "ai_pakar_ternak_sessions""".strip(), language="toml")
+table = "ai_pakar_ternak_sessions"
+core_memory_table = "ai_pakar_ternak_core_memory""".strip(), language="toml")
 
     if st.button("Tes Koneksi Database", width="stretch"):
         try:
@@ -2372,6 +2616,23 @@ table = "ai_pakar_ternak_sessions""".strip(), language="toml")
                 st.warning(result.get("message", "Koneksi belum siap."))
         except Exception as error:
             st.error(f"Tes koneksi database gagal: {error}")
+
+    cm1, cm2 = st.columns(2)
+    with cm1:
+        if st.button("Tes AI Core Memory", width="stretch", key="db_test_core_memory"):
+            try:
+                result = test_core_memory_connection(st.secrets)
+                if result.get("ok"):
+                    st.success(result.get("message", "AI Core Memory aktif."))
+                else:
+                    st.warning(result.get("message", "AI Core Memory belum siap."))
+            except Exception as error:
+                st.error(f"Tes AI Core Memory gagal: {error}")
+    with cm2:
+        if st.button("Muat AI Core Memory", width="stretch", key="db_load_core_memory"):
+            load_core_memory_once(force=True)
+            st.success(st.session_state.get("core_memory_status", "AI Core Memory dimuat."))
+            safe_rerun()
 
     col1, col2 = st.columns(2)
     with col1:
@@ -2417,7 +2678,8 @@ database = "postgres"
 user = "postgres"
 password = "ISI_PASSWORD_DATABASE_SUPABASE"
 sslmode = "require"
-table = "ai_pakar_ternak_sessions""".strip(),
+table = "ai_pakar_ternak_sessions"
+core_memory_table = "ai_pakar_ternak_core_memory""".strip(),
             language="toml",
         )
         return False
@@ -2473,7 +2735,27 @@ ON ai_pakar_ternak_sessions (updated_at DESC);
 ALTER TABLE ai_pakar_ternak_sessions ADD COLUMN IF NOT EXISTS session_id TEXT;
 ALTER TABLE ai_pakar_ternak_sessions ADD COLUMN IF NOT EXISTS payload JSONB;
 UPDATE ai_pakar_ternak_sessions SET session_id = session_key WHERE session_id IS NULL AND session_key IS NOT NULL;
-UPDATE ai_pakar_ternak_sessions SET payload = data WHERE payload IS NULL AND data IS NOT NULL;""".strip(),
+UPDATE ai_pakar_ternak_sessions SET payload = data WHERE payload IS NULL AND data IS NOT NULL;
+
+-- Tabel AI Core Memory untuk persona, skill, role, strategi, dan pembelajaran.
+CREATE TABLE IF NOT EXISTS ai_pakar_ternak_core_memory (
+    memory_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'learning',
+    category TEXT NOT NULL DEFAULT 'Catatan Lapangan',
+    priority TEXT NOT NULL DEFAULT 'Sedang',
+    memory TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'app',
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_pakar_ternak_core_memory_kind
+ON ai_pakar_ternak_core_memory (kind);
+
+CREATE INDEX IF NOT EXISTS idx_ai_pakar_ternak_core_memory_updated_at
+ON ai_pakar_ternak_core_memory (updated_at DESC);""".strip(),
             language="sql",
         )
 
@@ -2662,6 +2944,7 @@ def render_footer() -> None:
 
 
 init_state()
+load_core_memory_once()
 
 model_ids = [model["id"] for model in model_catalog]
 default_model = client.model if client.model in model_ids else model_ids[0]

@@ -44,6 +44,10 @@ DEFAULT_EXPERT_MEMORY: List[Dict[str, Any]] = [
 
 MEMORY_CATEGORIES = [
     "Identitas Pakar",
+    "Persona Ahli",
+    "Peran Strategis",
+    "Keahlian Teknis",
+    "Pembelajaran Kasus",
     "Strategi Perusahaan",
     "Kerangka Hulu-Hilir",
     "Konteks Lokal Indonesia",

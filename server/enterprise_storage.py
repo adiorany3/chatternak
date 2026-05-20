@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Tuple, Set
+from typing import Any, Dict, Tuple, Set, List
+import hashlib
 import json
 import os
 import re
@@ -110,6 +111,7 @@ def get_storage_config(secrets: Any = None) -> Dict[str, str]:
         "password": _as_str(section.get("password", _env_first("PGPASSWORD", "SUPABASE_DB_PASSWORD")), ""),
         "sslmode": _as_str(section.get("sslmode", _env_first("PGSSLMODE", default="require")), "require"),
         "table": _as_str(section.get("table", _env_first("DATABASE_TABLE", default="ai_pakar_ternak_sessions")), "ai_pakar_ternak_sessions"),
+        "core_memory_table": _as_str(section.get("core_memory_table", _env_first("AI_CORE_MEMORY_TABLE", "CORE_MEMORY_TABLE", default="ai_pakar_ternak_core_memory")), "ai_pakar_ternak_core_memory"),
     }
     cfg["mode"] = _normalise_provider(cfg["provider"], cfg)
 
@@ -405,3 +407,183 @@ def load_payload(session_id: str = "", secrets: Any = None) -> Tuple[bool, Dict[
     if cfg.get("configured") == "true" and cfg.get("mode") == "supabase_rest":
         return load_supabase_rest(session_id, cfg)
     return load_local()
+
+
+# ---------------------------------------------------------------------------
+# AI Core Memory: persistent persona, skill, role, and learned operational memory
+# ---------------------------------------------------------------------------
+
+CORE_MEMORY_KINDS = {"persona", "skill", "role", "policy", "strategy", "learning"}
+CORE_MEMORY_DEFAULT_TABLE = "ai_pakar_ternak_core_memory"
+
+
+def _core_memory_table(cfg: Dict[str, str]) -> str:
+    return cfg.get("core_memory_table") or CORE_MEMORY_DEFAULT_TABLE
+
+
+def _memory_id(item: Dict[str, Any]) -> str:
+    explicit = str(item.get("memory_id") or item.get("id") or "").strip()
+    if explicit:
+        return explicit[:96]
+    raw = "|".join([
+        str(item.get("kind") or "learning"),
+        str(item.get("category") or "Catatan Lapangan"),
+        str(item.get("memory") or ""),
+    ]).lower().strip()
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:40]
+
+
+def _normalise_core_memory_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    kind = str(item.get("kind") or item.get("type") or "learning").strip().lower()
+    if kind not in CORE_MEMORY_KINDS:
+        kind = "learning"
+    priority = str(item.get("priority") or item.get("prioritas") or "Sedang").strip().title()
+    if priority not in {"Tinggi", "Sedang", "Rendah"}:
+        priority = "Sedang"
+    memory = str(item.get("memory") or item.get("content") or item.get("catatan") or "").strip()
+    category = str(item.get("category") or item.get("kategori") or kind.title()).strip() or kind.title()
+    source = str(item.get("source") or item.get("sumber") or "supabase_core").strip() or "supabase_core"
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    return {
+        "memory_id": _memory_id({**item, "kind": kind, "category": category, "memory": memory}),
+        "kind": kind,
+        "category": category,
+        "priority": priority,
+        "memory": memory,
+        "source": source,
+        "metadata": metadata,
+        "created_at": str(item.get("created_at") or ""),
+        "updated_at": str(item.get("updated_at") or ""),
+        "usage_count": int(float(item.get("usage_count", 0) or 0)),
+    }
+
+
+def _ensure_core_memory_table(conn: Any, table: str) -> None:
+    safe_table = _safe_table_name(table)
+    index_prefix = _table_parts(table)[1]
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {safe_table} (
+                memory_id text PRIMARY KEY,
+                kind text NOT NULL DEFAULT 'learning',
+                category text NOT NULL DEFAULT 'Catatan Lapangan',
+                priority text NOT NULL DEFAULT 'Sedang',
+                memory text NOT NULL,
+                source text NOT NULL DEFAULT 'app',
+                usage_count integer NOT NULL DEFAULT 0,
+                metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                updated_at timestamptz NOT NULL DEFAULT now()
+            )
+            """
+        )
+        cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{index_prefix}_kind ON {safe_table} (kind)")
+        cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{index_prefix}_updated_at ON {safe_table} (updated_at DESC)")
+    conn.commit()
+
+
+def save_core_memory_items(items: List[Dict[str, Any]], secrets: Any = None) -> Dict[str, Any]:
+    """Persist AI persona/skill/role/learning memory to Supabase PostgreSQL.
+
+    This does not train model weights. It creates durable retrieval memory that is
+    injected into future prompts so the assistant behaves consistently after app
+    restarts and across sessions.
+    """
+    cfg = get_storage_config(secrets)
+    if cfg.get("configured") != "true" or cfg.get("mode") != "postgres":
+        return {"ok": False, "message": "AI Core Memory membutuhkan database PostgreSQL/Supabase aktif.", "saved": 0}
+    clean_items = [_normalise_core_memory_item(item) for item in (items or [])]
+    clean_items = [item for item in clean_items if item.get("memory")]
+    if not clean_items:
+        return {"ok": True, "message": "Tidak ada memory baru untuk disimpan.", "saved": 0}
+    table = _core_memory_table(cfg)
+    safe_table = _safe_table_name(table)
+    try:
+        from psycopg2.extras import Json
+    except Exception as error:
+        raise RuntimeError("Dependency psycopg2.extras tidak tersedia. Pastikan psycopg2-binary terpasang.") from error
+    with _connect_postgres(cfg) as conn:
+        _ensure_core_memory_table(conn, table)
+        with conn.cursor() as cur:
+            for item in clean_items:
+                cur.execute(
+                    f"""
+                    INSERT INTO {safe_table}
+                        (memory_id, kind, category, priority, memory, source, usage_count, metadata, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, 1, %s, now())
+                    ON CONFLICT (memory_id)
+                    DO UPDATE SET
+                        kind = EXCLUDED.kind,
+                        category = EXCLUDED.category,
+                        priority = EXCLUDED.priority,
+                        memory = EXCLUDED.memory,
+                        source = EXCLUDED.source,
+                        usage_count = {safe_table}.usage_count + 1,
+                        metadata = EXCLUDED.metadata,
+                        updated_at = now()
+                    """,
+                    (
+                        item["memory_id"],
+                        item["kind"],
+                        item["category"],
+                        item["priority"],
+                        item["memory"],
+                        item["source"],
+                        Json(item.get("metadata") or {}),
+                    ),
+                )
+        conn.commit()
+    return {"ok": True, "message": f"{len(clean_items)} AI Core Memory tersimpan di Supabase.", "saved": len(clean_items), "table": table}
+
+
+def load_core_memory_items(secrets: Any = None, limit: int = 240) -> Tuple[bool, List[Dict[str, Any]], str]:
+    cfg = get_storage_config(secrets)
+    if cfg.get("configured") != "true" or cfg.get("mode") != "postgres":
+        return False, [], "Database PostgreSQL/Supabase belum aktif untuk AI Core Memory."
+    table = _core_memory_table(cfg)
+    safe_table = _safe_table_name(table)
+    with _connect_postgres(cfg) as conn:
+        _ensure_core_memory_table(conn, table)
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT memory_id, kind, category, priority, memory, source, usage_count, metadata,
+                       created_at::text, updated_at::text
+                FROM {safe_table}
+                ORDER BY
+                    CASE priority WHEN 'Tinggi' THEN 0 WHEN 'Sedang' THEN 1 ELSE 2 END,
+                    updated_at DESC
+                LIMIT %s
+                """,
+                (int(limit),),
+            )
+            rows = cur.fetchall()
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        items.append({
+            "memory_id": row[0],
+            "kind": row[1],
+            "category": row[2],
+            "priority": row[3],
+            "memory": row[4],
+            "source": row[5],
+            "usage_count": row[6],
+            "metadata": row[7] if isinstance(row[7], dict) else {},
+            "created_at": row[8],
+            "updated_at": row[9],
+        })
+    return True, items, f"{len(items)} AI Core Memory dimuat dari Supabase ({table})."
+
+
+def test_core_memory_connection(secrets: Any = None) -> Dict[str, Any]:
+    cfg = get_storage_config(secrets)
+    if cfg.get("configured") != "true" or cfg.get("mode") != "postgres":
+        return {"ok": False, "message": "Database PostgreSQL/Supabase belum dikonfigurasi.", "table": _core_memory_table(cfg)}
+    table = _core_memory_table(cfg)
+    with _connect_postgres(cfg) as conn:
+        _ensure_core_memory_table(conn, table)
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) FROM {_safe_table_name(table)}")
+            total = int(cur.fetchone()[0])
+    return {"ok": True, "message": f"AI Core Memory aktif. Total memory: {total}.", "table": table, "total": total}

@@ -148,11 +148,12 @@ streamlit run app.py
 
 ## Memory Ahli
 
-Sistem sekarang memakai tiga lapisan memory:
+Sistem sekarang memakai empat lapisan memory:
 
 1. **Default expert memory** di kode aplikasi: selalu aktif setelah deploy/restart dan membentuk AI sebagai ahli peternakan hulu-hilir.
 2. **Streamlit Secrets memory**: memory permanen yang bisa disalin admin ke `App settings → Secrets`, cocok untuk konteks perusahaan, standar direksi, atau aturan strategis yang harus selalu ada.
-3. **Memory berkembang**: memory yang ditambahkan admin dari panel aplikasi atau dari saran data sesi. Memory ini ikut tersimpan di Backup XLSX dan akan aktif kembali saat XLSX dipulihkan.
+3. **AI Core Memory Supabase**: persona, skill, role, strategi, policy, dan pembelajaran kasus disimpan pada tabel `ai_pakar_ternak_core_memory` agar tetap aktif setelah Streamlit restart.
+4. **Memory berkembang lokal/XLSX**: memory yang ditambahkan admin dari panel aplikasi atau dari saran data sesi. Memory ini ikut tersimpan di Backup XLSX dan dapat disinkronkan ke Supabase.
 
 Contoh Secrets tambahan:
 
@@ -171,7 +172,14 @@ priority = "Tinggi"
 memory = "Setiap insight manajemen harus menyebut dampak biaya, risiko operasional, prioritas, dan target 7/30 hari."
 ```
 
-Catatan: Streamlit Cloud tidak menyediakan database permanen otomatis untuk data yang ditulis aplikasi. Karena itu memory berkembang disimpan ke XLSX, sedangkan memory yang harus selalu hidup setelah restart sebaiknya dimasukkan ke Secrets.
+Catatan: data baru tidak melakukan fine-tuning/model training otomatis. Sistem menyimpan ringkasan pembelajaran sebagai **retrieval memory** di Supabase, lalu memory tersebut dimasukkan kembali ke prompt AI sehingga jawaban berikutnya makin konsisten.
+
+Di panel admin **Memory Ahli**, gunakan tombol:
+- **Tes AI Core Memory**
+- **Simpan Persona/Skill/Role Default**
+- **Muat Memory dari Supabase**
+- **Simpan Memory Berkembang ke Supabase**
+
 
 ## Streamlit Online Secrets
 
@@ -312,6 +320,26 @@ ALTER TABLE ai_pakar_ternak_sessions ADD COLUMN IF NOT EXISTS session_id TEXT;
 ALTER TABLE ai_pakar_ternak_sessions ADD COLUMN IF NOT EXISTS payload JSONB;
 UPDATE ai_pakar_ternak_sessions SET session_id = session_key WHERE session_id IS NULL AND session_key IS NOT NULL;
 UPDATE ai_pakar_ternak_sessions SET payload = data WHERE payload IS NULL AND data IS NOT NULL;
+
+-- Tabel AI Core Memory untuk persona, skill, role, strategi, policy, dan pembelajaran kasus.
+CREATE TABLE IF NOT EXISTS ai_pakar_ternak_core_memory (
+    memory_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'learning',
+    category TEXT NOT NULL DEFAULT 'Catatan Lapangan',
+    priority TEXT NOT NULL DEFAULT 'Sedang',
+    memory TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'app',
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_pakar_ternak_core_memory_kind
+ON ai_pakar_ternak_core_memory (kind);
+
+CREATE INDEX IF NOT EXISTS idx_ai_pakar_ternak_core_memory_updated_at
+ON ai_pakar_ternak_core_memory (updated_at DESC);
 ```
 
 Gunakan konfigurasi Secrets berikut:
@@ -326,6 +354,7 @@ user = "postgres"
 password = "ISI_PASSWORD_DATABASE_SUPABASE"
 sslmode = "require"
 table = "ai_pakar_ternak_sessions"
+core_memory_table = "ai_pakar_ternak_core_memory"
 ```
 
 Atau gunakan satu baris koneksi:
@@ -335,6 +364,7 @@ Atau gunakan satu baris koneksi:
 provider = "postgres"
 database_url = "postgresql://postgres:ISI_PASSWORD_DATABASE_SUPABASE@db.huhezxjjnypthgbafmdv.supabase.co:5432/postgres?sslmode=require"
 table = "ai_pakar_ternak_sessions"
+core_memory_table = "ai_pakar_ternak_core_memory"
 ```
 
 Untuk local development saja, boleh memakai `.env` berdasarkan `.env.example`:

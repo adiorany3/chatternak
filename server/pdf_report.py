@@ -8,6 +8,7 @@ from xml.sax.saxutils import escape
 from ugm_departments import UGM_DEPARTMENTS, HULU_HILIR_FLOW, department_coverage_check
 from commodity_breeds import breed_detail, commodity_context as commodity_breed_context, commodity_label
 from farm_profile import goal_context, goal_label
+from enterprise_features import executive_summary, finance_snapshot, downstream_guidance
 
 APP_NAME = "AI Pakar Ternak"
 DEVELOPER = "Developed by Galuh Adi Insani (Fakultas Peternakan UGM)"
@@ -176,6 +177,9 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     local_insights = context.get("local_insights", []) or []
     department_coverage = context.get("department_coverage") or department_coverage_check(profile, records, calendar, health, {"decision_log": decision_log})
     records_summary = _records_summary(records)
+    enterprise_summary = context.get("enterprise_summary") or executive_summary(profile, records, calendar, health, app_state.get("biosecurity_checked", []), app_state.get("enterprise_state", {}))
+    enterprise_finance = context.get("enterprise_finance") or finance_snapshot(profile, records, (app_state.get("enterprise_state", {}) or {}).get("finance_transactions", []))
+    enterprise_downstream = context.get("enterprise_downstream") or downstream_guidance(profile)
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -308,6 +312,22 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
         ["Pemakaian AI", _text(usage.get("requests", 0)) + " request", f"Token: {_text(usage.get('total_tokens', 0))}; Estimasi: {_rp(usage.get('estimated_cost_rp', 0))}"],
     ]
     story.append(_make_table([[ _make_paragraph(c, styles["Body"]) for c in row] for row in score_table], [4.2 * cm, 3.2 * cm, 8.5 * cm]))
+
+    story.append(_make_paragraph("Dashboard Enterprise / Direksi", styles["SectionTitle"]))
+    enterprise_table = [
+        ["Metrik", "Nilai", "Makna"],
+        ["Skor Enterprise", _text(enterprise_summary.get("score")) + "/100", _text(enterprise_summary.get("level"))],
+        ["Peringatan", f"Merah: {_text(enterprise_summary.get('red_warnings'))}; Kuning: {_text(enterprise_summary.get('yellow_warnings'))}", "Dasar prioritas manajemen"],
+        ["Pendapatan", _rp(enterprise_finance.get("revenue_rp")), "Akumulasi transaksi pendapatan"],
+        ["Total Biaya", _rp(enterprise_finance.get("total_cost_rp")), "Biaya recording + transaksi"],
+        ["Margin Kasar", _rp(enterprise_finance.get("gross_margin_rp")), "Pendapatan dikurangi biaya"],
+        ["Fokus Hilir", _text(enterprise_downstream.get("category")), "Produk utama yang perlu dijaga mutunya"],
+    ]
+    story.append(_make_table([[ _make_paragraph(c, styles["Body"]) for c in row] for row in enterprise_table], [4.2 * cm, 4.2 * cm, 7.6 * cm]))
+    if enterprise_summary.get("warnings"):
+        story.append(_make_paragraph("Early warning utama:", styles["Body"]))
+        for warn in enterprise_summary.get("warnings", [])[:5]:
+            story.append(_make_paragraph(f"- {warn.get('level')} | {warn.get('area')}: {warn.get('finding')} Tindakan: {warn.get('action')}", styles["Small"]))
 
     story.append(_make_paragraph("Prioritas Rekomendasi", styles["SectionTitle"]))
     reasons = readiness.get("reasons", []) or []
@@ -447,7 +467,12 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     else:
         story.append(_make_paragraph("Memory default pakar aktif dari kode aplikasi. Tambahkan memory berkembang melalui Admin Mode atau Streamlit Secrets untuk kebutuhan perusahaan/farm tertentu.", styles["Body"]))
 
-    story.append(_make_paragraph("8. Catatan Penutup", styles["SectionTitle"]))
+    story.append(_make_paragraph("8. Hilirisasi dan Mutu Produk", styles["SectionTitle"]))
+    story.append(_make_paragraph(f"Fokus produk: {enterprise_downstream.get('category', '-')}", styles["Body"]))
+    for item in enterprise_downstream.get("checklist", [])[:8]:
+        story.append(_make_paragraph(f"- {item}", styles["Body"]))
+
+    story.append(_make_paragraph("9. Catatan Penutup", styles["SectionTitle"]))
     story.append(_make_paragraph(
         "Laporan ini disusun dari data yang diinput pengguna. Akurasi rekomendasi bergantung pada kelengkapan data lapangan. Untuk kasus darurat, kematian mendadak, demam tinggi, sesak napas, diare berdarah, kembung berat, atau penurunan produksi drastis, segera hubungi dokter hewan/paramedik setempat.",
         styles["Body"],

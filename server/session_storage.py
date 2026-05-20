@@ -13,9 +13,10 @@ from ugm_departments import UGM_DEPARTMENTS, HULU_HILIR_FLOW, department_coverag
 from commodity_breeds import catalog_rows, commodity_label
 from farm_profile import goal_label, maintenance_goal_rows
 from farm_memory import memory_table_rows, normalise_memory_items
+from enterprise_features import normalise_enterprise_state, executive_summary, early_warnings, finance_snapshot, downstream_guidance, kpi_standard_for
 
 APP_NAME = "AI Pakar Ternak"
-STORAGE_VERSION = "1.5"
+STORAGE_VERSION = "2.0"
 
 HEADER_FILL = "166534"
 SUBHEADER_FILL = "DCFCE7"
@@ -269,6 +270,10 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
         ("Kedalaman Penjelasan", app_state.get("explanation_level", "")),
         ("SOP Terakhir", (app_state.get("last_sop") or {}).get("type", "") if isinstance(app_state.get("last_sop"), dict) else ""),
         ("Memory Berkembang", len(app_state.get("expert_memory", []) or []) if isinstance(app_state, dict) else 0),
+        ("Role Enterprise", (app_state.get("enterprise_state") or {}).get("current_role", "") if isinstance(app_state.get("enterprise_state"), dict) else ""),
+        ("Perusahaan/Holding", (app_state.get("enterprise_state") or {}).get("company_name", "") if isinstance(app_state.get("enterprise_state"), dict) else ""),
+        ("Jumlah Farm/Unit", len((app_state.get("enterprise_state") or {}).get("farms", []) or []) if isinstance(app_state.get("enterprise_state"), dict) else 0),
+        ("Jumlah Batch", len((app_state.get("enterprise_state") or {}).get("batches", []) or []) if isinstance(app_state.get("enterprise_state"), dict) else 0),
     ]
     ws.cell(4, 1, "Metrik")
     ws.cell(4, 2, "Nilai")
@@ -507,6 +512,127 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
     _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(headers))
     _set_widths(ws, {"A": 32, "B": 42, "C": 70, "D": 42, "E": 20, "F": 56})
     _auto_filter(ws, header_row, len(headers))
+
+
+    # Enterprise Management
+    enterprise_state = normalise_enterprise_state(app_state.get("enterprise_state", {}) if isinstance(app_state, dict) else {})
+    summary = executive_summary(profile, records, calendar, health, app_state.get("biosecurity_checked", []) if isinstance(app_state, dict) else [], enterprise_state)
+    finance = finance_snapshot(profile, records, enterprise_state.get("finance_transactions", []))
+    warnings = early_warnings(profile, records, calendar, health, app_state.get("biosecurity_checked", []) if isinstance(app_state, dict) else [], enterprise_state)
+    downstream = downstream_guidance(profile)
+
+    ws = _sheet_title(wb, "Enterprise_Dashboard")
+    _write_key_value_sheet(ws, "Dashboard Enterprise", [
+        ("Role", enterprise_state.get("current_role", "")),
+        ("Perusahaan", enterprise_state.get("company_name", "")),
+        ("Skor", summary.get("score", "")),
+        ("Level", summary.get("level", "")),
+        ("Prioritas", summary.get("priority", "")),
+        ("Farm/Unit", len(enterprise_state.get("farms", []) or [])),
+        ("Batch", len(enterprise_state.get("batches", []) or [])),
+        ("Pendapatan", finance.get("revenue_rp", 0)),
+        ("Total Biaya", finance.get("total_cost_rp", 0)),
+        ("Margin Kasar", finance.get("gross_margin_rp", 0)),
+        ("Hilirisasi", downstream.get("category", "")),
+    ], "Ringkasan untuk direktur/manager farm.")
+
+    ws = _sheet_title(wb, "Enterprise_Farms")
+    _style_title(ws, "Multi-Farm dan Unit", "Daftar farm/unit yang dikelola dalam sesi/perusahaan.")
+    headers = ["ID", "Nama", "Lokasi", "Manager", "Komoditas", "Dibuat"]
+    header_row = 4
+    for c, h in enumerate(headers, start=1):
+        ws.cell(header_row, c, h)
+    _style_table(ws, header_row, len(headers))
+    farms = enterprise_state.get("farms", []) or []
+    if farms:
+        for r, item in enumerate(farms, start=header_row + 1):
+            ws.cell(r, 1, item.get("id", "")); ws.cell(r, 2, item.get("name", "")); ws.cell(r, 3, item.get("location", "")); ws.cell(r, 4, item.get("manager", "")); ws.cell(r, 5, item.get("commodity", "")); ws.cell(r, 6, item.get("created_at", ""))
+    else:
+        ws.cell(header_row + 1, 1, "Belum ada data farm/unit tambahan.")
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(headers)); _set_widths(ws, {"A": 24, "B": 30, "C": 28, "D": 24, "E": 20, "F": 24}); _auto_filter(ws, header_row, len(headers))
+
+    ws = _sheet_title(wb, "Enterprise_Batches")
+    _style_title(ws, "Batch / Siklus Produksi", "Daftar batch/siklus produksi untuk multi-farm.")
+    headers = ["ID", "Nama", "Farm ID", "Mulai", "Target", "Populasi Target", "Target Bobot/Produksi", "Pasar", "Status"]
+    header_row = 4
+    for c, h in enumerate(headers, start=1):
+        ws.cell(header_row, c, h)
+    _style_table(ws, header_row, len(headers))
+    batches = enterprise_state.get("batches", []) or []
+    if batches:
+        for r, item in enumerate(batches, start=header_row + 1):
+            ws.cell(r, 1, item.get("id", "")); ws.cell(r, 2, item.get("name", "")); ws.cell(r, 3, item.get("farm_id", "")); ws.cell(r, 4, item.get("start_date", "")); ws.cell(r, 5, item.get("target_date", "")); ws.cell(r, 6, item.get("target_population", "")); ws.cell(r, 7, item.get("target_weight_or_output", "")); ws.cell(r, 8, item.get("market", "")); ws.cell(r, 9, item.get("status", ""))
+    else:
+        ws.cell(header_row + 1, 1, "Belum ada batch.")
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(headers)); _set_widths(ws, {"A": 24, "B": 30, "C": 24, "D": 15, "E": 15, "F": 18, "G": 22, "H": 28, "I": 16}); _auto_filter(ws, header_row, len(headers))
+
+    ws = _sheet_title(wb, "Early_Warning")
+    _style_title(ws, "Early Warning", "Peringatan otomatis dari KPI, kesehatan, biosecurity, stok pakan, dan recording.")
+    headers = ["Level", "Area", "Temuan", "Tindakan"]
+    header_row = 4
+    for c, h in enumerate(headers, start=1):
+        ws.cell(header_row, c, h)
+    _style_table(ws, header_row, len(headers))
+    if warnings:
+        for r, item in enumerate(warnings, start=header_row + 1):
+            ws.cell(r, 1, item.get("level", "")); ws.cell(r, 2, item.get("area", "")); ws.cell(r, 3, item.get("finding", "")); ws.cell(r, 4, item.get("action", ""))
+    else:
+        ws.cell(header_row + 1, 1, "Tidak ada early warning utama.")
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(headers)); _set_widths(ws, {"A": 14, "B": 20, "C": 60, "D": 70}); _auto_filter(ws, header_row, len(headers))
+
+    ws = _sheet_title(wb, "Keuangan_Enterprise")
+    _write_key_value_sheet(ws, "Ringkasan Keuangan Enterprise", [(k, v) for k, v in finance.items()], "HPP, biaya, pendapatan, margin, dan ROI estimasi.")
+    txs = enterprise_state.get("finance_transactions", []) or []
+    start = ws.max_row + 3
+    ws.cell(start, 1, "Tanggal"); ws.cell(start, 2, "Jenis"); ws.cell(start, 3, "Nominal"); ws.cell(start, 4, "Keterangan")
+    _style_table(ws, start, 4)
+    for r, item in enumerate(txs, start=start + 1):
+        ws.cell(r, 1, item.get("date", "")); ws.cell(r, 2, item.get("type", "")); ws.cell(r, 3, item.get("amount_rp", 0)); ws.cell(r, 4, item.get("description", ""))
+    _style_cells(ws, start + 1, max(ws.max_row, start + 1), 4); _set_widths(ws, {"A": 18, "B": 20, "C": 20, "D": 60})
+
+    ws = _sheet_title(wb, "Knowledge_Base")
+    _style_title(ws, "Knowledge Base / RAG Ringan", "SOP, standar perusahaan, dan catatan teknis yang dapat dibaca offline.")
+    headers = ["Tanggal", "Judul", "Tag", "Isi"]
+    header_row = 4
+    for c, h in enumerate(headers, start=1): ws.cell(header_row, c, h)
+    _style_table(ws, header_row, len(headers))
+    docs = enterprise_state.get("knowledge_docs", []) or []
+    if docs:
+        for r, item in enumerate(docs, start=header_row + 1):
+            ws.cell(r, 1, item.get("created_at", "")); ws.cell(r, 2, item.get("title", "")); ws.cell(r, 3, item.get("tags", "")); ws.cell(r, 4, item.get("content", ""))
+    else:
+        ws.cell(header_row + 1, 1, "Belum ada knowledge base tambahan.")
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(headers)); _set_widths(ws, {"A": 22, "B": 32, "C": 28, "D": 100}); _auto_filter(ws, header_row, len(headers))
+
+    ws = _sheet_title(wb, "Audit_Trail")
+    _style_title(ws, "Audit Trail", "Catatan perubahan data dan keputusan untuk akuntabilitas manajemen.")
+    headers = ["Waktu", "Role", "Aksi", "Detail", "Sumber"]
+    header_row = 4
+    for c, h in enumerate(headers, start=1): ws.cell(header_row, c, h)
+    _style_table(ws, header_row, len(headers))
+    logs = enterprise_state.get("audit_trail", []) or []
+    if logs:
+        for r, item in enumerate(logs, start=header_row + 1):
+            ws.cell(r, 1, item.get("created_at", "")); ws.cell(r, 2, item.get("actor_role", "")); ws.cell(r, 3, item.get("action", "")); ws.cell(r, 4, item.get("detail", "")); ws.cell(r, 5, item.get("source", ""))
+    else:
+        ws.cell(header_row + 1, 1, "Belum ada audit trail.")
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(headers)); _set_widths(ws, {"A": 24, "B": 24, "C": 28, "D": 80, "E": 18}); _auto_filter(ws, header_row, len(headers))
+
+    ws = _sheet_title(wb, "Notifikasi")
+    _style_title(ws, "Template Notifikasi", "Template pesan untuk WhatsApp/Telegram/Email berdasarkan early warning.")
+    messages = []
+    try:
+        from enterprise_features import notification_messages
+        messages = notification_messages(summary)
+    except Exception:
+        messages = []
+    headers = ["No", "Pesan"]
+    header_row = 4
+    for c, h in enumerate(headers, start=1): ws.cell(header_row, c, h)
+    _style_table(ws, header_row, len(headers))
+    for r, msg in enumerate(messages, start=header_row + 1):
+        ws.cell(r, 1, r - header_row); ws.cell(r, 2, msg)
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(headers)); _set_widths(ws, {"A": 8, "B": 100})
 
     # Pemakaian AI
     ws = _sheet_title(wb, "Pemakaian_AI")

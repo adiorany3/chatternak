@@ -102,6 +102,24 @@ from expert_rules import (
     TECHNICAL_GLOSSARY,
     COMMODITY_TEMPLATES,
 )
+from enterprise_features import (
+    ROLE_OPTIONS,
+    ROLE_DESCRIPTIONS,
+    DEFAULT_ENTERPRISE_STATE,
+    normalise_enterprise_state,
+    make_audit_event,
+    kpi_standard_for,
+    validate_record_data,
+    early_warnings,
+    executive_summary,
+    finance_snapshot,
+    knowledge_search,
+    downstream_guidance,
+    notification_messages,
+    enterprise_context,
+    enterprise_report_markdown,
+)
+from enterprise_storage import get_storage_config, save_payload as save_enterprise_payload, load_payload as load_enterprise_payload
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SESSION_BACKUP_DIR = Path(tempfile.gettempdir()) / "ai_pakar_ternak_sessions"
@@ -134,6 +152,7 @@ APP_MODES = [
     "Input Data",
     "Konsultasi AI",
     "Insight & Keputusan",
+    "Manajemen Enterprise",
     "Alat Hitung",
     "Edukasi & Laporan",
 ]
@@ -199,6 +218,7 @@ def init_state() -> None:
         "education_progress": [],
         "expert_memory": [],
         "expert_memory_suggestions": [],
+        "enterprise_state": dict(DEFAULT_ENTERPRISE_STATE),
         "farm_profile": dict(DEFAULT_PROFILE),
         "farm_records": [],
         "farm_calendar_events": [],
@@ -336,6 +356,7 @@ def build_current_session_payload() -> Dict[str, Any]:
             "decision_log": st.session_state.decision_log,
             "education_progress": st.session_state.education_progress,
             "expert_memory": normalise_memory_items(st.session_state.expert_memory),
+            "enterprise_state": normalise_enterprise_state(st.session_state.enterprise_state),
             "active_memory_rows": memory_table_rows(st.session_state.expert_memory, get_secret_memory_items()),
         },
     )
@@ -362,6 +383,9 @@ def build_pdf_report_context() -> Dict[str, Any]:
         "local_insights": local_operational_insights(profile, records, calendar_events, health_case),
         "department_coverage": department_coverage_check(profile, records, calendar_events, health_case, {"formula_selected": st.session_state.formula_selected, "decision_log": st.session_state.decision_log}),
         "memory_rows": memory_table_rows(st.session_state.expert_memory, get_secret_memory_items()),
+        "enterprise_summary": executive_summary(profile, records, calendar_events, health_case, st.session_state.biosecurity_checked, st.session_state.enterprise_state),
+        "enterprise_finance": finance_snapshot(profile, records, normalise_enterprise_state(st.session_state.enterprise_state).get("finance_transactions", [])),
+        "enterprise_downstream": downstream_guidance(profile),
     }
 
 
@@ -405,6 +429,7 @@ def restore_session_from_payload(payload: Dict[str, Any]) -> None:
     st.session_state.decision_log = list(app_state.get("decision_log", []) or [])
     st.session_state.education_progress = list(app_state.get("education_progress", []) or [])
     st.session_state.expert_memory = normalise_memory_items(app_state.get("expert_memory", []) or [])
+    st.session_state.enterprise_state = normalise_enterprise_state(app_state.get("enterprise_state", {}) or {})
     st.session_state.session_request_count = int(float(usage.get("requests", 0) or 0))
     st.session_state.session_prompt_tokens = int(float(usage.get("prompt_tokens", 0) or 0))
     st.session_state.session_completion_tokens = int(float(usage.get("completion_tokens", 0) or 0))
@@ -708,6 +733,14 @@ def run_ai_consultation(prompt: str, selected_model_id: str, selected_fallback_m
         biosecurity_checked=st.session_state.biosecurity_checked,
         user_message=prompt,
     )
+    ent_context = enterprise_context(
+        st.session_state.farm_profile,
+        st.session_state.farm_records,
+        st.session_state.farm_calendar_events,
+        st.session_state.last_health_case,
+        st.session_state.biosecurity_checked,
+        st.session_state.enterprise_state,
+    )
     answer_kwargs = {
         "message": prompt,
         "history": st.session_state.messages,
@@ -721,7 +754,7 @@ def run_ai_consultation(prompt: str, selected_model_id: str, selected_fallback_m
         "profile": st.session_state.farm_profile,
         "records": st.session_state.farm_records,
         "calendar_events": st.session_state.farm_calendar_events,
-        "extra_context": (audience_context(st.session_state.user_mode, st.session_state.explanation_level) + "\n" + get_active_memory_context() + "\n" + expert_context + "\n" + extra_context).strip(),
+        "extra_context": (audience_context(st.session_state.user_mode, st.session_state.explanation_level) + "\n" + get_active_memory_context() + "\n" + expert_context + "\n" + ent_context + "\n" + extra_context).strip(),
         "user_mode": st.session_state.user_mode,
     }
     try:
@@ -2022,6 +2055,302 @@ def render_decision_center(
         render_decision_log()
 
 
+
+def _enterprise_state() -> Dict[str, Any]:
+    st.session_state.enterprise_state = normalise_enterprise_state(st.session_state.get("enterprise_state", {}))
+    return st.session_state.enterprise_state
+
+
+def _save_enterprise_state(state: Dict[str, Any], action: str = "Update", detail: str = "") -> None:
+    state = normalise_enterprise_state(state)
+    state.setdefault("audit_trail", [])
+    if detail:
+        state["audit_trail"].append(make_audit_event(action, state.get("current_role", ""), detail))
+        state["audit_trail"] = state["audit_trail"][-500:]
+    st.session_state.enterprise_state = state
+
+
+def render_executive_dashboard() -> None:
+    st.subheader("Dashboard Direktur Utama")
+    profile = normalise_profile(st.session_state.farm_profile)
+    state = _enterprise_state()
+    summary = executive_summary(profile, st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case, st.session_state.biosecurity_checked, state)
+    finance = finance_snapshot(profile, st.session_state.farm_records, state.get("finance_transactions", []))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Skor Enterprise", f"{summary['score']}/100", summary["level"])
+    c2.metric("Farm/Unit", summary.get("farms", 0))
+    c3.metric("Batch", summary.get("batches", 0))
+    c4.metric("Margin Kasar", format_rupiah(finance.get("gross_margin_rp", 0)))
+    st.markdown("### Prioritas Direksi Minggu Ini")
+    warnings = summary.get("warnings", [])
+    if warnings:
+        for idx, warn in enumerate(warnings[:5], 1):
+            st.markdown(f"**{idx}. {warn['level']} | {warn['area']}** — {warn['finding']}  ")
+            st.caption(f"Tindakan: {warn['action']}")
+    else:
+        st.success("Belum ada peringatan utama. Pertahankan recording dan review KPI mingguan.")
+    st.markdown("### Ringkasan Eksekutif")
+    st.info(summary.get("priority", "Pertahankan kontrol operasional."))
+
+
+def render_multi_farm_batch() -> None:
+    st.subheader("Multi-Farm, Unit, dan Batch")
+    state = _enterprise_state()
+    with st.form("enterprise_company_form"):
+        company_name = st.text_input("Nama perusahaan / holding / kelompok", value=state.get("company_name", ""))
+        feed_stock = st.number_input("Stok pakan total saat ini (kg)", min_value=0.0, value=float(state.get("feed_stock_kg", 0.0) or 0.0), step=10.0)
+        submitted = st.form_submit_button("Simpan konteks perusahaan", width="stretch")
+        if submitted:
+            state["company_name"] = company_name
+            state["feed_stock_kg"] = feed_stock
+            _save_enterprise_state(state, "Update perusahaan", f"Konteks perusahaan diperbarui: {company_name}")
+            st.success("Konteks perusahaan tersimpan.")
+
+    st.markdown("#### Tambah Farm/Unit")
+    with st.form("add_farm_form"):
+        col1, col2 = st.columns(2)
+        name = col1.text_input("Nama farm/unit", placeholder="Farm Sleman / Kandang Broiler A / Unit Lele 1")
+        location = col2.text_input("Lokasi")
+        manager = col1.text_input("Penanggung jawab")
+        commodity = col2.text_input("Komoditas utama", value=normalise_profile(st.session_state.farm_profile).get("animal_type", ""))
+        if st.form_submit_button("Tambah Farm/Unit", width="stretch"):
+            if name.strip():
+                item = {"id": make_audit_event("id", "system", name)["created_at"].replace(":", "").replace("-", ""), "name": name, "location": location, "manager": manager, "commodity": commodity, "created_at": datetime.now().isoformat(timespec="seconds")}
+                state.setdefault("farms", []).append(item)
+                state["active_farm_id"] = item["id"]
+                _save_enterprise_state(state, "Tambah farm", f"Menambahkan farm/unit {name}")
+                st.success("Farm/unit ditambahkan.")
+            else:
+                st.warning("Nama farm/unit wajib diisi.")
+
+    farms = state.get("farms", [])
+    if farms:
+        st.dataframe(farms, width="stretch", hide_index=True)
+    else:
+        st.info("Belum ada farm/unit tambahan. Profil utama tetap digunakan sebagai unit default.")
+
+    st.markdown("#### Tambah Batch / Siklus Produksi")
+    with st.form("add_batch_form"):
+        col1, col2, col3 = st.columns(3)
+        batch_name = col1.text_input("Nama batch", placeholder="Batch Broiler Mei 2026")
+        start_date = col2.date_input("Tanggal mulai", value=date.today())
+        target_date = col3.date_input("Target panen / evaluasi", value=date.today() + timedelta(days=35))
+        target_population = col1.number_input("Populasi target", min_value=0, value=int(normalise_profile(st.session_state.farm_profile).get("population", 0)), step=1)
+        target_weight = col2.number_input("Target bobot/produksi", min_value=0.0, value=0.0, step=0.1)
+        market = col3.text_input("Target pasar")
+        if st.form_submit_button("Tambah Batch", width="stretch"):
+            if batch_name.strip():
+                item = {"id": f"batch-{datetime.now().strftime('%Y%m%d%H%M%S')}", "name": batch_name, "farm_id": state.get("active_farm_id", ""), "start_date": start_date.isoformat(), "target_date": target_date.isoformat(), "target_population": target_population, "target_weight_or_output": target_weight, "market": market, "status": "Aktif"}
+                state.setdefault("batches", []).append(item)
+                state["active_batch_id"] = item["id"]
+                _save_enterprise_state(state, "Tambah batch", f"Menambahkan batch {batch_name}")
+                st.success("Batch ditambahkan.")
+            else:
+                st.warning("Nama batch wajib diisi.")
+    if state.get("batches"):
+        st.dataframe(state.get("batches", []), width="stretch", hide_index=True)
+
+
+def render_quick_daily_input() -> None:
+    st.subheader("Input Harian Cepat")
+    st.caption("Untuk petugas kandang/peternak rakyat: isi data minimal, sistem memvalidasi dan memasukkannya ke Catatan Performa.")
+    p = normalise_profile(st.session_state.farm_profile)
+    with st.form("quick_daily_input"):
+        col1, col2, col3 = st.columns(3)
+        rec_date = col1.date_input("Tanggal", value=date.today())
+        population = col2.number_input("Populasi hari ini", min_value=0, value=int(p.get("population", 0)), step=1)
+        sick = col3.number_input("Sakit/terindikasi", min_value=0, value=0, step=1)
+        mortality = col1.number_input("Mati", min_value=0, value=0, step=1)
+        feed_kg = col2.number_input("Pakan terpakai (kg)", min_value=0.0, value=0.0, step=0.1)
+        avg_weight = col3.number_input("Bobot rata-rata (kg)", min_value=0.0, value=float(p.get("average_weight_kg", 0.0)), step=0.1)
+        cost = col1.number_input("Biaya hari ini (Rp)", min_value=0.0, value=0.0, step=1000.0)
+        eggs = col2.number_input("Telur (butir)", min_value=0, value=0, step=1)
+        milk = col3.number_input("Susu (liter)", min_value=0.0, value=0.0, step=0.1)
+        note = st.text_area("Catatan lapangan", placeholder="contoh: nafsu makan turun, litter basah, pakan baru, suhu kandang panas")
+        submitted = st.form_submit_button("Simpan Input Harian", width="stretch")
+    if submitted:
+        record = {"date": rec_date.isoformat(), "population": population, "avg_weight_kg": avg_weight, "feed_kg": feed_kg, "cost_rp": cost, "mortality": mortality, "eggs": eggs, "milk_liter": milk, "note": f"Sakit: {sick}. {note}".strip()}
+        issues = validate_record_data(record, p)
+        if issues:
+            for issue in issues:
+                st.warning(f"{issue['level']} - {issue['field']}: {issue['message']}")
+        st.session_state.farm_records = add_record(st.session_state.farm_records, record)
+        state = _enterprise_state()
+        state.setdefault("quick_inputs", []).append({**record, "sick": sick})
+        _save_enterprise_state(state, "Input harian", f"Input harian {rec_date.isoformat()} disimpan")
+        st.success("Input harian tersimpan ke Catatan Performa dan Backup XLSX.")
+
+
+def render_kpi_early_warning() -> None:
+    st.subheader("KPI Standar dan Early Warning")
+    p = normalise_profile(st.session_state.farm_profile)
+    state = _enterprise_state()
+    standard = kpi_standard_for(p.get("animal_type", ""), p.get("production_goal", ""))
+    st.markdown("#### Standar KPI Komoditas")
+    st.json(standard)
+    warnings = early_warnings(p, st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case, st.session_state.biosecurity_checked, state)
+    st.markdown("#### Early Warning")
+    if warnings:
+        for warn in warnings:
+            if warn["level"] == "Merah":
+                st.error(f"{warn['area']}: {warn['finding']}\n\nTindakan: {warn['action']}")
+            else:
+                st.warning(f"{warn['area']}: {warn['finding']}\n\nTindakan: {warn['action']}")
+    else:
+        st.success("Belum ada early warning utama.")
+
+
+def render_finance_center() -> None:
+    st.subheader("Keuangan, HPP, ROI, dan Cashflow")
+    state = _enterprise_state()
+    with st.form("finance_form"):
+        col1, col2, col3 = st.columns(3)
+        tx_date = col1.date_input("Tanggal transaksi", value=date.today())
+        tx_type = col2.selectbox("Jenis", ["Biaya", "Pendapatan", "Investasi", "Pakan", "Obat/Vaksin", "Tenaga Kerja", "Transportasi", "Lainnya"])
+        amount = col3.number_input("Nominal (Rp)", min_value=0.0, value=0.0, step=10000.0)
+        desc = st.text_input("Keterangan")
+        if st.form_submit_button("Tambah Transaksi", width="stretch"):
+            state.setdefault("finance_transactions", []).append({"date": tx_date.isoformat(), "type": tx_type, "amount_rp": amount, "description": desc})
+            _save_enterprise_state(state, "Tambah transaksi", f"{tx_type} Rp {amount:,.0f}: {desc}")
+            st.success("Transaksi ditambahkan.")
+    snap = finance_snapshot(normalise_profile(st.session_state.farm_profile), st.session_state.farm_records, state.get("finance_transactions", []))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Pendapatan", format_rupiah(snap["revenue_rp"]))
+    c2.metric("Total Biaya", format_rupiah(snap["total_cost_rp"]))
+    c3.metric("Margin Kasar", format_rupiah(snap["gross_margin_rp"]))
+    c4.metric("HPP / ekor-unit", format_rupiah(snap["hpp_per_head_rp"]))
+    if snap.get("roi_pct") is not None:
+        st.caption(f"ROI estimasi: {snap['roi_pct']:.2f}%")
+    if state.get("finance_transactions"):
+        st.dataframe(state["finance_transactions"], width="stretch", hide_index=True)
+
+
+def render_knowledge_base_center() -> None:
+    st.subheader("Knowledge Base / RAG Ringan")
+    st.caption("Tambahkan SOP, standar perusahaan, atau catatan teknis. AI akan memakai memory/konteks ini melalui sesi dan backup XLSX.")
+    state = _enterprise_state()
+    with st.form("kb_form"):
+        title = st.text_input("Judul dokumen/catatan")
+        tags = st.text_input("Tag", placeholder="pakan, broiler, SOP, susu")
+        content = st.text_area("Isi ringkas", height=120)
+        if st.form_submit_button("Tambah Knowledge", width="stretch"):
+            if title.strip() and content.strip():
+                state.setdefault("knowledge_docs", []).append({"created_at": datetime.now().isoformat(timespec="seconds"), "title": title, "tags": tags, "content": content})
+                _save_enterprise_state(state, "Tambah knowledge", title)
+                add_expert_memory(f"Knowledge internal: {title} — {content[:500]}", category="Knowledge Base", priority="Tinggi", source="enterprise")
+                st.success("Knowledge ditambahkan dan diringkas ke Memory Ahli.")
+            else:
+                st.warning("Judul dan isi wajib diisi.")
+    query = st.text_input("Cari knowledge", placeholder="contoh: SOP vaksin broiler")
+    if query:
+        results = knowledge_search(query, state.get("knowledge_docs", []))
+        if results:
+            for doc in results:
+                with st.expander(doc.get("title", "Knowledge")):
+                    st.caption(doc.get("tags", ""))
+                    st.write(doc.get("content", ""))
+        else:
+            st.info("Belum ada dokumen yang cocok.")
+    if state.get("knowledge_docs"):
+        st.dataframe([{k: v for k, v in d.items() if k != "content"} for d in state["knowledge_docs"]], width="stretch", hide_index=True)
+
+
+def render_downstream_center() -> None:
+    st.subheader("Hilirisasi dan Teknologi Hasil")
+    guide = downstream_guidance(normalise_profile(st.session_state.farm_profile))
+    st.markdown(f"Fokus produk: **{guide['category'].title()}**")
+    for item in guide.get("checklist", []):
+        st.checkbox(item, value=False, key=f"downstream_{guide['category']}_{item[:18]}")
+    st.info("Untuk perusahaan, catat susut, grade mutu, cold chain, reject, dan nilai tambah produk pada transaksi/knowledge base.")
+
+
+def render_database_sync_center() -> None:
+    st.subheader("Database Permanen Opsional")
+    st.caption("Streamlit Cloud bisa restart. Untuk permanen sungguhan, hubungkan ke Supabase melalui Secrets. XLSX tetap menjadi backup offline.")
+    state = _enterprise_state()
+    cfg = get_storage_config(st.secrets)
+    st.write(f"Provider: **{cfg.get('provider')}** | Status: **{cfg.get('configured')}**")
+    with st.expander("Contoh Secrets Supabase", expanded=False):
+        st.code('[database]\nprovider = "supabase"\nsupabase_url = "https://PROJECT.supabase.co"\nsupabase_key = "SERVICE_ROLE_OR_ANON_KEY"\ntable = "ai_pakar_ternak_sessions"', language="toml")
+        st.caption("Tabel minimal: session_id text unique, updated_at timestamp/text, payload jsonb.")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Simpan ke Database", width="stretch"):
+            try:
+                result = save_enterprise_payload(build_current_session_payload(), st.secrets)
+                state["last_sync_status"] = result
+                _save_enterprise_state(state, "Sync database", result.get("message", ""))
+                st.success(result.get("message", "Berhasil disimpan."))
+            except Exception as error:
+                st.error(f"Gagal sync database: {error}")
+    with col2:
+        session_id = st.text_input("Session ID untuk dimuat", value=st.session_state.session_id)
+        if st.button("Muat dari Database", width="stretch"):
+            ok, payload, msg = load_enterprise_payload(session_id, st.secrets)
+            if ok:
+                restore_session_from_payload(payload)
+                st.success(msg)
+                safe_rerun()
+            else:
+                st.warning(msg)
+    if state.get("last_sync_status"):
+        st.json(state["last_sync_status"])
+
+
+def render_notification_center() -> None:
+    st.subheader("Notifikasi WhatsApp/Telegram - Template")
+    st.caption("Aplikasi belum mengirim otomatis, tetapi menyiapkan teks siap salin. Integrasi webhook bisa ditambahkan dari database/automation perusahaan.")
+    summary = executive_summary(normalise_profile(st.session_state.farm_profile), st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case, st.session_state.biosecurity_checked, _enterprise_state())
+    for msg in notification_messages(summary):
+        st.code(msg, language="text")
+    state = _enterprise_state()
+    with st.form("notif_contacts"):
+        contact = st.text_input("Kontak penerima / grup", placeholder="Manager Farm A / Grup WA Kandang 1")
+        channel = st.selectbox("Channel", ["WhatsApp", "Telegram", "Email", "Manual"])
+        if st.form_submit_button("Simpan Kontak", width="stretch"):
+            if contact.strip():
+                state.setdefault("notification_contacts", []).append({"contact": contact, "channel": channel})
+                _save_enterprise_state(state, "Tambah kontak notifikasi", f"{channel}: {contact}")
+                st.success("Kontak notifikasi disimpan.")
+    if state.get("notification_contacts"):
+        st.dataframe(state["notification_contacts"], width="stretch", hide_index=True)
+
+
+def render_audit_trail_center() -> None:
+    st.subheader("Audit Trail Keputusan dan Data")
+    state = _enterprise_state()
+    if state.get("audit_trail"):
+        st.dataframe(list(reversed(state["audit_trail"][-200:])), width="stretch", hide_index=True)
+    else:
+        st.info("Belum ada audit trail enterprise.")
+    st.download_button("Download Laporan Enterprise Markdown", data=enterprise_report_markdown(normalise_profile(st.session_state.farm_profile), st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.last_health_case, st.session_state.biosecurity_checked, state), file_name="laporan-enterprise-ai-pakar-ternak.md", mime="text/markdown", width="stretch")
+
+
+def render_enterprise_center(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.header("Manajemen Enterprise")
+    st.caption("Lapisan profesional untuk multi-farm, KPI, early warning, database permanen opsional, keuangan, knowledge base, hilirisasi, notifikasi, dan audit trail.")
+    tabs = st.tabs(["Dashboard Direksi", "Multi-Farm", "Input Cepat", "KPI & Warning", "Keuangan", "Knowledge Base", "Hilirisasi", "Database", "Notifikasi", "Audit Trail"])
+    with tabs[0]:
+        render_executive_dashboard()
+    with tabs[1]:
+        render_multi_farm_batch()
+    with tabs[2]:
+        render_quick_daily_input()
+    with tabs[3]:
+        render_kpi_early_warning()
+    with tabs[4]:
+        render_finance_center()
+    with tabs[5]:
+        render_knowledge_base_center()
+    with tabs[6]:
+        render_downstream_center()
+    with tabs[7]:
+        render_database_sync_center()
+    with tabs[8]:
+        render_notification_center()
+    with tabs[9]:
+        render_audit_trail_center()
+
 def render_tools_center() -> None:
     st.header("Alat Hitung")
     st.caption("Kalkulator sederhana untuk kebutuhan harian. Hasilnya dapat dipakai sebagai bahan konsultasi dan pencatatan.")
@@ -2104,6 +2433,16 @@ with st.sidebar:
             EXPLANATION_LEVELS,
             index=EXPLANATION_LEVELS.index(st.session_state.explanation_level) if st.session_state.explanation_level in EXPLANATION_LEVELS else 1,
         )
+        ent_state = normalise_enterprise_state(st.session_state.enterprise_state)
+        selected_role = st.selectbox(
+            "Role operasional",
+            ROLE_OPTIONS,
+            index=ROLE_OPTIONS.index(ent_state.get("current_role")) if ent_state.get("current_role") in ROLE_OPTIONS else 0,
+            help="Role ini mengubah gaya insight: direksi lebih strategis, petugas lebih instruksi lapangan.",
+        )
+        ent_state["current_role"] = selected_role
+        st.session_state.enterprise_state = ent_state
+        st.caption(ROLE_DESCRIPTIONS.get(selected_role, ""))
 
     with st.expander("Backup XLSX", expanded=False):
         st.caption("Unduh XLSX agar data tetap bisa dibaca tanpa aplikasi dan bisa dipulihkan lagi.")
@@ -2217,6 +2556,8 @@ elif tool_option == "Konsultasi AI":
     safe_render("Konsultasi AI", render_consultation_center, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Insight & Keputusan":
     safe_render("Insight & Keputusan", render_decision_center, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "Manajemen Enterprise":
+    safe_render("Manajemen Enterprise", render_enterprise_center, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Alat Hitung":
     safe_render("Alat Hitung", render_tools_center)
 elif tool_option == "Edukasi & Laporan":

@@ -85,14 +85,15 @@ Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 
 ## Alur Aplikasi Sederhana
 
-Sidebar hanya memakai 6 menu utama agar tidak membingungkan:
+Sidebar memakai 7 menu utama agar tetap ringkas namun mencakup level peternak rakyat sampai enterprise:
 
 1. **Beranda** — ringkasan farm, risiko, insight cepat, dan alur kerja.
 2. **Input Data** — profil farm, catatan performa, dan kalender.
 3. **Konsultasi AI** — konsultasi bertahap, konsultasi 5 departemen, chat pakar, dan triase kesehatan.
 4. **Insight & Keputusan** — AI insight, formulasi pakan, KPI, prediksi usaha, SOP, biosecurity, dan teknologi hasil ternak.
-5. **Alat Hitung** — kalkulator pakan, prediksi pertumbuhan, dan BEP.
-6. **Edukasi & Laporan** — library lokal, materi edukasi, dan laporan manajemen.
+5. **Manajemen Enterprise** — multi-farm, role, KPI, early warning, database, keuangan, knowledge base, dan audit trail.
+6. **Alat Hitung** — kalkulator pakan, prediksi pertumbuhan, dan BEP.
+7. **Edukasi & Laporan** — library lokal, materi edukasi, dan laporan manajemen.
 
 Algoritma kerja utama:
 
@@ -104,6 +105,8 @@ Catat Data Lapangan
 Konsultasi / Triase / Chat AI
    ↓
 Baca Insight, KPI, SOP, Prediksi, dan Rekomendasi
+   ↓
+Pantau Dashboard Enterprise / Early Warning bila diperlukan
    ↓
 Download Backup XLSX
 ```
@@ -250,3 +253,63 @@ Versi ini ditambahkan pengaman agar lebih stabil di Streamlit Online:
 - Reset Chat, Reset Data Farm, dan Kosongkan Log Keputusan memakai nonce key agar tidak memicu error `st.session_state` setelah widget dibuat.
 - Generator XLSX dan PDF dibungkus dengan error handler.
 - Autosave menggunakan folder temp dan tidak dijadikan satu-satunya penyimpanan permanen. Backup utama tetap file XLSX yang diunduh pengguna.
+
+## Manajemen Enterprise / Platform Perusahaan
+
+Versi ini menambahkan lapisan **Manajemen Enterprise** untuk kebutuhan peternak rakyat yang berkembang, koperasi, perusahaan peternakan, hingga keputusan level direktur utama.
+
+Fitur tambahan:
+
+- **Role akses operasional**: Owner/Direktur Utama, Direktur Operasional, Manager Farm, Dokter Hewan/Konsultan, Admin Data, Petugas Kandang, dan Peternak Rakyat.
+- **Multi-farm dan multi-batch**: menyimpan daftar farm/unit, kandang/kolam, batch/siklus produksi, target panen, dan target pasar.
+- **Input harian cepat**: petugas cukup mengisi populasi, sakit, mati, pakan, bobot, biaya, telur/susu, dan catatan lapangan.
+- **Dashboard Direktur Utama**: skor enterprise, margin kasar, jumlah farm, batch, peringatan merah/kuning, dan prioritas keputusan.
+- **Early warning system**: membaca mortalitas, ADG, FCR, stok pakan, biosecurity, kasus kesehatan, dan kelengkapan recording.
+- **KPI standar per komoditas**: broiler, layer, ruminansia potong/perah, ikan, kelinci, babi, dan komoditas lain.
+- **Validasi data otomatis**: mencegah input tidak masuk akal seperti mortalitas melebihi populasi, bobot tidak realistis, atau pakan negatif.
+- **Keuangan enterprise**: transaksi pendapatan/biaya, total biaya, margin kasar, HPP per ekor/unit, HPP per kg gain, dan ROI estimasi.
+- **Knowledge Base / RAG ringan**: admin dapat menambahkan SOP, standar perusahaan, atau catatan teknis yang ikut masuk Memory Ahli dan Backup XLSX.
+- **Hilirisasi / Teknologi Hasil**: checklist mutu daging, susu, telur, dan ikan konsumsi sesuai tujuan pemeliharaan.
+- **Database permanen opsional**: mendukung local temp save dan Supabase REST jika dikonfigurasi melalui Secrets.
+- **Template notifikasi**: pesan siap salin untuk WhatsApp/Telegram/Email berdasarkan early warning.
+- **Audit trail**: mencatat perubahan data penting, input harian, transaksi, knowledge base, dan sinkronisasi database.
+
+Menu baru di sidebar:
+
+```text
+Manajemen Enterprise
+├── Dashboard Direksi
+├── Multi-Farm
+├── Input Cepat
+├── KPI & Warning
+├── Keuangan
+├── Knowledge Base
+├── Hilirisasi
+├── Database
+├── Notifikasi
+└── Audit Trail
+```
+
+### Opsional: Supabase Database
+
+Buat tabel Supabase minimal:
+
+```sql
+create table if not exists ai_pakar_ternak_sessions (
+  session_id text primary key,
+  updated_at text,
+  payload jsonb
+);
+```
+
+Tambahkan ke Streamlit Secrets:
+
+```toml
+[database]
+provider = "supabase"
+supabase_url = "https://PROJECT.supabase.co"
+supabase_key = "ISI_SUPABASE_KEY"
+table = "ai_pakar_ternak_sessions"
+```
+
+Jika Supabase belum dikonfigurasi, aplikasi tetap berjalan memakai local temp save dan Backup XLSX.

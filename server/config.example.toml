@@ -2,15 +2,21 @@
 enabled = true
 chat_completions_url = "https://api.slashai.my.id/v1/chat/completions"
 model = "slashai/gpt-5-nano"
-fallback_models = [
-  "slashai/gpt-5-mini",
-  "slashai/claude-haiku-4.5",
-  "slashai/gemini-3-flash",
-  "slashai/deepseek-v3.2"
-]
+fallback_models = ["slashai/gpt-5-mini", "slashai/claude-haiku-4.5", "slashai/gemini-3-flash", "slashai/deepseek-v3.2"]
 smart_fallback_enabled = true
-temperature = 0.7
-max_tokens = 1600
-test_max_tokens = 200
-timeout = 60
-min_answer_chars = 30
+temperature = 0.45
+max_tokens = 2200
+test_max_tokens = 250
+timeout = 75
+min_answer_chars = 45
+
+[limits]
+enabled = true
+max_requests_per_session = 60
+max_estimated_cost_rp_per_session = 2500
+max_history_messages = 16
+
+[ui]
+show_debug = false
+show_cost = true
+show_model_trace = true

@@ -1,28 +1,37 @@
-# Konfigurasi umum OpenAI-compatible Chat Completions API.
-# API key JANGAN disimpan di file ini untuk deployment publik.
-# Untuk Streamlit Online, simpan API key di App settings → Secrets.
+# Konfigurasi umum. API key jangan disimpan di file ini untuk deployment publik.
+# Untuk Streamlit Online, isi API key di App settings → Secrets.
 
 [openai]
 enabled = true
 chat_completions_url = "https://api.slashai.my.id/v1/chat/completions"
 
-# Model awal dibuat paling murah/ringan.
-# Setiap request akan mulai dari model ini lagi.
+# Setiap request selalu mulai dari model awal murah ini.
 model = "slashai/gpt-5-nano"
 
-# Jika model awal gagal, kosong, terlalu pendek, atau tidak menjawab,
-# aplikasi akan naik ke model berikutnya secara berurutan.
+# Jika model awal kosong, error, kepotong, atau tidak menjawab, sistem naik bertahap.
 fallback_models = [
   "slashai/gpt-5-mini",
   "slashai/claude-haiku-4.5",
   "slashai/gemini-3-flash",
-  "slashai/deepseek-v3.2"
+  "slashai/deepseek-v3.2",
+  "slashai/claude-sonnet-4.5"
 ]
 smart_fallback_enabled = true
 
-temperature = 0.7
-max_tokens = 1600
-# Khusus tombol Tes koneksi API. Jangan terlalu kecil untuk model reasoning.
-test_max_tokens = 200
-timeout = 60
-min_answer_chars = 30
+temperature = 0.45
+max_tokens = 2200
+test_max_tokens = 250
+timeout = 75
+min_answer_chars = 45
+
+[limits]
+# Batas ini berbasis session Streamlit; cukup untuk mencegah pemakaian liar sederhana.
+enabled = true
+max_requests_per_session = 60
+max_estimated_cost_rp_per_session = 2500
+max_history_messages = 16
+
+[ui]
+show_debug = false
+show_cost = true
+show_model_trace = true

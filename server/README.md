@@ -51,6 +51,32 @@ Footer aplikasi: **Developed by Galuh Adi Insani**.
   - Pemakaian_AI
   - RAW_JSON tersembunyi untuk restore data
 
+
+## Alur Aplikasi Sederhana
+
+Sidebar hanya memakai 6 menu utama agar tidak membingungkan:
+
+1. **Beranda** — ringkasan farm, risiko, insight cepat, dan alur kerja.
+2. **Input Data** — profil farm, catatan performa, dan kalender.
+3. **Konsultasi AI** — konsultasi bertahap, chat pakar, dan triase kesehatan.
+4. **Insight & Keputusan** — AI insight, formulasi pakan, KPI, prediksi usaha, SOP, dan biosecurity.
+5. **Alat Hitung** — kalkulator pakan, prediksi pertumbuhan, dan BEP.
+6. **Edukasi & Laporan** — library lokal, materi edukasi, dan laporan manajemen.
+
+Algoritma kerja utama:
+
+```text
+Isi Profil Farm
+   ↓
+Catat Data Lapangan
+   ↓
+Konsultasi / Triase / Chat AI
+   ↓
+Baca Insight, KPI, SOP, Prediksi, dan Rekomendasi
+   ↓
+Download Backup XLSX
+```
+
 ## Struktur File
 
 ```text

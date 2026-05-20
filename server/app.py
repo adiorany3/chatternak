@@ -83,24 +83,45 @@ ADMIN_PLACEHOLDERS = {
 }
 
 APP_MODES = [
-    "Dashboard Farm",
-    "AI Insight",
-    "Chat Pakar",
-    "Konsultasi Bertahap",
-    "Profil Peternakan",
-    "Konsultasi Kesehatan",
-    "Formulasi Pakan",
-    "Benchmark KPI",
-    "SOP & Biosecurity",
-    "Prediksi Usaha",
-    "Library Lokal",
-    "Edukasi Peternak",
-    "Laporan Manajemen",
-    "Catatan Performa",
-    "Kalender Manajemen",
-    "Kalkulator Pakan",
-    "Prediksi Pertumbuhan",
-    "Analisis BEP",
+    "Beranda",
+    "Input Data",
+    "Konsultasi AI",
+    "Insight & Keputusan",
+    "Alat Hitung",
+    "Edukasi & Laporan",
+]
+
+WORKFLOW_STEPS = [
+    {
+        "step": "1",
+        "title": "Isi profil farm",
+        "description": "Masukkan jenis ternak, populasi, fase, bobot, lokasi, pakan, dan masalah utama.",
+        "menu": "Input Data",
+    },
+    {
+        "step": "2",
+        "title": "Catat data lapangan",
+        "description": "Tambahkan bobot, pakan, mortalitas, biaya, produksi, dan jadwal manajemen.",
+        "menu": "Input Data",
+    },
+    {
+        "step": "3",
+        "title": "Konsultasikan masalah",
+        "description": "Gunakan konsultasi bertahap atau chat pakar agar AI bertanya sesuai data yang kurang.",
+        "menu": "Konsultasi AI",
+    },
+    {
+        "step": "4",
+        "title": "Ambil keputusan",
+        "description": "Baca insight, KPI, prediksi usaha, rekomendasi pakan, SOP, dan risiko biosecurity.",
+        "menu": "Insight & Keputusan",
+    },
+    {
+        "step": "5",
+        "title": "Simpan backup XLSX",
+        "description": "Unduh file XLSX agar data tetap bisa dibaca dan dipulihkan meskipun sesi Streamlit habis.",
+        "menu": "Sidebar Backup",
+    },
 ]
 
 
@@ -1301,6 +1322,113 @@ Developed by Galuh Adi Insani
     st.download_button("Download Laporan Markdown", data=report, file_name="laporan-manajemen-pakar-ternak.md", mime="text/markdown", use_container_width=True)
     st.download_button("Download Backup Lengkap XLSX", data=get_session_xlsx_bytes(), file_name=session_filename(build_current_session_payload()), mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
+def render_workflow_overview() -> None:
+    st.subheader("Alur kerja sederhana")
+    st.caption("Ikuti urutan ini agar peternak tidak bingung: isi data dulu, konsultasi, baca insight, lalu simpan backup.")
+    columns = st.columns(len(WORKFLOW_STEPS))
+    for col, item in zip(columns, WORKFLOW_STEPS):
+        with col:
+            st.markdown(
+                f"""
+                <div style="border:1px solid #e5e7eb; border-radius:14px; padding:14px; min-height:178px; background:#ffffff;">
+                    <div style="font-size:22px; font-weight:700;">{item['step']}</div>
+                    <div style="font-weight:700; margin-top:6px;">{item['title']}</div>
+                    <div style="font-size:13px; color:#4b5563; margin-top:8px;">{item['description']}</div>
+                    <div style="font-size:12px; color:#6b7280; margin-top:10px;">Menu: {item['menu']}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+def render_simple_home() -> None:
+    render_dashboard()
+    st.divider()
+    render_workflow_overview()
+
+
+def render_input_data_center() -> None:
+    st.header("Input Data")
+    st.caption("Semua data dasar dikumpulkan di sini. Data ini menjadi dasar jawaban AI, insight, laporan, dan backup XLSX.")
+    tab_profile, tab_records, tab_calendar = st.tabs(["1. Profil Farm", "2. Catatan Performa", "3. Kalender"])
+    with tab_profile:
+        render_profile()
+    with tab_records:
+        render_records()
+    with tab_calendar:
+        render_calendar()
+
+
+def render_consultation_center(
+    selected_model_id: str,
+    selected_fallback_models: List[str],
+    selected_temperature: float,
+    max_history_messages: int,
+    prefer_ai: bool,
+) -> None:
+    st.header("Konsultasi AI")
+    st.caption("Gunakan konsultasi bertahap untuk peternak pemula. Gunakan chat pakar untuk pertanyaan bebas. Gunakan triase untuk kasus kesehatan.")
+    tab_guided, tab_chat, tab_health = st.tabs(["Konsultasi Bertahap", "Chat Pakar", "Triase Kesehatan"])
+    with tab_guided:
+        render_guided_consultation(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    with tab_chat:
+        render_chat(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    with tab_health:
+        render_health_consultation(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+
+
+def render_decision_center(
+    selected_model_id: str,
+    selected_fallback_models: List[str],
+    selected_temperature: float,
+    max_history_messages: int,
+    prefer_ai: bool,
+) -> None:
+    st.header("Insight & Keputusan")
+    st.caption("Bagian ini dipakai setelah data farm terisi. Fokusnya adalah rekomendasi tindakan, efisiensi pakan, KPI, SOP, dan prediksi usaha.")
+    tab_insight, tab_feed, tab_kpi, tab_prediction, tab_sop = st.tabs([
+        "AI Insight",
+        "Formulasi Pakan",
+        "Benchmark KPI",
+        "Prediksi Usaha",
+        "SOP & Biosecurity",
+    ])
+    with tab_insight:
+        render_ai_insights(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    with tab_feed:
+        render_feed_formulation()
+    with tab_kpi:
+        render_benchmark_kpi(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    with tab_prediction:
+        render_business_prediction(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    with tab_sop:
+        render_sop_biosecurity(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+
+
+def render_tools_center() -> None:
+    st.header("Alat Hitung")
+    st.caption("Kalkulator sederhana untuk kebutuhan harian. Hasilnya dapat dipakai sebagai bahan konsultasi dan pencatatan.")
+    tab_feed, tab_growth, tab_bep = st.tabs(["Kebutuhan Pakan", "Prediksi Pertumbuhan", "BEP"])
+    with tab_feed:
+        render_feed_calculator()
+    with tab_growth:
+        render_growth_prediction()
+    with tab_bep:
+        render_bep()
+
+
+def render_learning_report_center() -> None:
+    st.header("Edukasi & Laporan")
+    st.caption("Bagian ini untuk membaca pengetahuan lokal, belajar bertahap, dan menyiapkan laporan yang dapat dibagikan.")
+    tab_library, tab_education, tab_report = st.tabs(["Library Lokal", "Edukasi", "Laporan"])
+    with tab_library:
+        render_local_library()
+    with tab_education:
+        render_education()
+    with tab_report:
+        render_management_report()
+
+
 def render_footer() -> None:
     st.markdown("---")
     st.markdown(
@@ -1325,49 +1453,49 @@ prefer_ai = True
 max_history_messages = max_history_messages_default
 
 st.title("🐄 Pakar Ternak Nusantara")
-st.caption("Asisten AI manajemen peternakan: profil farm, pakan, kesehatan, reproduksi, produksi, limbah, biaya, kalender, dan recording performa.")
+st.caption("Asisten keputusan peternakan: isi data, konsultasi, baca insight, lalu simpan backup XLSX.")
 
 with st.sidebar:
-    st.header("Mode Aplikasi")
-    tool_option = st.selectbox("Mode", APP_MODES)
-
-    st.divider()
-    st.header("Mode Pengguna")
-    st.session_state.user_mode = st.selectbox(
-        "Tipe pengguna",
-        USER_MODES,
-        index=USER_MODES.index(st.session_state.user_mode) if st.session_state.user_mode in USER_MODES else 0,
-        help="Peternak Rakyat memakai bahasa lebih sederhana. Industri Modern memakai KPI, SOP, dan istilah manajerial.",
-    )
-    st.session_state.explanation_level = st.selectbox(
-        "Kedalaman penjelasan",
-        EXPLANATION_LEVELS,
-        index=EXPLANATION_LEVELS.index(st.session_state.explanation_level) if st.session_state.explanation_level in EXPLANATION_LEVELS else 1,
+    st.header("Menu Utama")
+    tool_option = st.selectbox(
+        "Pilih alur kerja",
+        APP_MODES,
+        help="Menu dibuat ringkas agar peternak tidak bingung. Fitur detail ada di dalam tab setiap menu.",
     )
 
-    st.divider()
     p = normalise_profile(st.session_state.farm_profile)
-    st.header("Profil Ringkas")
-    st.caption(f"{p['population']} ekor {p['animal_type']} · {p['phase']} · {profile_completeness(p)}% lengkap")
-    st.progress(profile_completeness(p) / 100)
+    completeness = profile_completeness(p)
+    st.caption(f"Profil: {p['population']} ekor {p['animal_type']} · {completeness}% lengkap")
+    st.progress(completeness / 100)
 
-    st.divider()
-    st.header("Backup XLSX")
-    st.caption("Data sesi otomatis disimpan ke XLSX sementara dan dapat diunduh agar tetap bisa dibaca tanpa aplikasi.")
-    try:
-        xlsx_payload = build_current_session_payload()
-        st.download_button(
-            "Download Backup XLSX",
-            data=export_session_xlsx(xlsx_payload),
-            file_name=session_filename(xlsx_payload),
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
+    with st.expander("Preferensi Jawaban", expanded=False):
+        st.session_state.user_mode = st.selectbox(
+            "Tipe pengguna",
+            USER_MODES,
+            index=USER_MODES.index(st.session_state.user_mode) if st.session_state.user_mode in USER_MODES else 0,
+            help="Peternak Rakyat memakai bahasa lebih sederhana. Industri Modern memakai KPI, SOP, dan istilah manajerial.",
         )
-    except Exception as error:
-        st.error(f"Gagal membuat backup XLSX: {error}")
+        st.session_state.explanation_level = st.selectbox(
+            "Kedalaman penjelasan",
+            EXPLANATION_LEVELS,
+            index=EXPLANATION_LEVELS.index(st.session_state.explanation_level) if st.session_state.explanation_level in EXPLANATION_LEVELS else 1,
+        )
 
-    with st.expander("Pulihkan sesi dari XLSX"):
-        restore_file = st.file_uploader("Upload file backup XLSX", type=["xlsx"], key="restore_xlsx_file")
+    with st.expander("Backup XLSX", expanded=False):
+        st.caption("Unduh XLSX agar data tetap bisa dibaca tanpa aplikasi dan bisa dipulihkan lagi.")
+        try:
+            xlsx_payload = build_current_session_payload()
+            st.download_button(
+                "Download Backup XLSX",
+                data=export_session_xlsx(xlsx_payload),
+                file_name=session_filename(xlsx_payload),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        except Exception as error:
+            st.error(f"Gagal membuat backup XLSX: {error}")
+
+        restore_file = st.file_uploader("Pulihkan dari XLSX", type=["xlsx"], key="restore_xlsx_file")
         if st.button("Pulihkan Data", use_container_width=True, disabled=restore_file is None):
             try:
                 restored = import_session_xlsx(restore_file)
@@ -1378,76 +1506,51 @@ with st.sidebar:
             except Exception as error:
                 st.error(f"Gagal memulihkan XLSX: {error}")
 
-    if st.session_state.last_autosave_at:
-        st.caption(f"Autosave terakhir: {st.session_state.last_autosave_at}")
-    if st.session_state.last_autosave_error:
-        st.warning(f"Autosave gagal: {st.session_state.last_autosave_error}")
-    st.caption("Catatan: file server Streamlit Online bisa hilang saat app restart/redeploy. Backup utama adalah file XLSX yang diunduh peternak.")
+        if st.session_state.last_autosave_at:
+            st.caption(f"Autosave terakhir: {st.session_state.last_autosave_at}")
+        if st.session_state.last_autosave_error:
+            st.warning(f"Autosave gagal: {st.session_state.last_autosave_error}")
+        st.caption("Di Streamlit Online, backup utama tetap file XLSX yang diunduh peternak.")
 
-    st.divider()
-    st.header("Data & Percakapan")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if st.button("Reset Chat", use_container_width=True):
-            reset_chat()
-            st.rerun()
-    with col_b:
-        st.download_button(
-            "JSON",
-            data=export_app_json(),
-            file_name="pakar-ternak-nusantara-data.json",
-            mime="application/json",
-            use_container_width=True,
-        )
-    if st.session_state.admin_authenticated:
-        if st.button("Reset Data Farm", use_container_width=True):
-            reset_farm_data()
-            st.rerun()
+    with st.expander("Data & Admin", expanded=False):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("Reset Chat", use_container_width=True):
+                reset_chat()
+                st.rerun()
+        with col_b:
+            st.download_button(
+                "JSON",
+                data=export_app_json(),
+                file_name="pakar-ternak-nusantara-data.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        if st.session_state.admin_authenticated:
+            if st.button("Reset Data Farm", use_container_width=True):
+                reset_farm_data()
+                st.rerun()
 
-    (
-        selected_model_id,
-        selected_fallback_models,
-        selected_temperature,
-        prefer_ai,
-        max_history_messages,
-    ) = render_admin_panel(model_ids, default_model, fallback_defaults, max_history_messages_default)
+        (
+            selected_model_id,
+            selected_fallback_models,
+            selected_temperature,
+            prefer_ai,
+            max_history_messages,
+        ) = render_admin_panel(model_ids, default_model, fallback_defaults, max_history_messages_default)
 
-if tool_option == "Dashboard Farm":
-    render_dashboard()
-elif tool_option == "AI Insight":
-    render_ai_insights(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
-elif tool_option == "Chat Pakar":
-    render_chat(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
-elif tool_option == "Konsultasi Bertahap":
-    render_guided_consultation(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
-elif tool_option == "Profil Peternakan":
-    render_profile()
-elif tool_option == "Konsultasi Kesehatan":
-    render_health_consultation(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
-elif tool_option == "Formulasi Pakan":
-    render_feed_formulation()
-elif tool_option == "Benchmark KPI":
-    render_benchmark_kpi(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
-elif tool_option == "SOP & Biosecurity":
-    render_sop_biosecurity(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
-elif tool_option == "Prediksi Usaha":
-    render_business_prediction(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
-elif tool_option == "Library Lokal":
-    render_local_library()
-elif tool_option == "Edukasi Peternak":
-    render_education()
-elif tool_option == "Laporan Manajemen":
-    render_management_report()
-elif tool_option == "Catatan Performa":
-    render_records()
-elif tool_option == "Kalender Manajemen":
-    render_calendar()
-elif tool_option == "Kalkulator Pakan":
-    render_feed_calculator()
-elif tool_option == "Prediksi Pertumbuhan":
-    render_growth_prediction()
-elif tool_option == "Analisis BEP":
-    render_bep()
+if tool_option == "Beranda":
+    render_simple_home()
+elif tool_option == "Input Data":
+    render_input_data_center()
+elif tool_option == "Konsultasi AI":
+    render_consultation_center(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "Insight & Keputusan":
+    render_decision_center(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "Alat Hitung":
+    render_tools_center()
+elif tool_option == "Edukasi & Laporan":
+    render_learning_report_center()
 
 autosave_session_xlsx()
 render_footer()

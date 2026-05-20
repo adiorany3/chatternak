@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import os
 import json
 import requests
@@ -20,10 +20,21 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "enabled": True,
         "api_key": "",  # legacy fallback; jangan dipakai untuk deployment publik
         "chat_completions_url": "https://api.slashai.my.id/v1/chat/completions",
-        "model": "slashai/gpt-5-mini",
+        # Model awal dibuat paling murah/ringan. Jika jawabannya gagal/kosong/tidak layak,
+        # aplikasi akan naik ke fallback_models lalu kembali lagi ke model awal untuk request berikutnya.
+        "model": "slashai/gpt-5-nano",
+        "fallback_models": [
+            "slashai/gpt-5-mini",
+            "slashai/claude-haiku-4.5",
+            "slashai/gemini-3-flash",
+            "slashai/deepseek-v3.2",
+        ],
+        "smart_fallback_enabled": True,
         "temperature": 0.7,
-        "max_tokens": 1000,
+        "max_tokens": 1600,
+        "test_max_tokens": 200,
         "timeout": 60,
+        "min_answer_chars": 30,
     }
 }
 
@@ -40,6 +51,29 @@ ROOT_SECRET_ALIASES = {
     "chat_completions_url": ("OPENAI_CHAT_COMPLETIONS_URL", "SLASHAI_CHAT_COMPLETIONS_URL"),
     "model": ("OPENAI_MODEL", "SLASHAI_MODEL"),
 }
+
+ENV_FALLBACK_KEYS = ("OPENAI_FALLBACK_MODELS", "SLASHAI_FALLBACK_MODELS")
+
+UNHELPFUL_PATTERNS = (
+    "maaf, saya tidak dapat",
+    "maaf saya tidak dapat",
+    "saya tidak dapat membantu",
+    "saya tidak bisa membantu",
+    "i can't help",
+    "i cannot help",
+    "as an ai",
+    "sebagai ai",
+    "tidak memiliki informasi",
+    "tidak punya informasi",
+    "di luar konteks",
+    "outside the context",
+)
+
+DOMAIN_TERMS = (
+    "ternak", "peternakan", "sapi", "kambing", "ayam", "bebek", "itik", "ikan", "kelinci",
+    "pakan", "kandang", "kolam", "vaksin", "penyakit", "reproduksi", "bunting",
+    "inseminasi", "pupuk", "kompos", "biogas", "bep", "modal", "produksi",
+)
 
 
 class OpenAIChatAPI:
@@ -74,9 +108,13 @@ class OpenAIChatAPI:
             self._get_setting("chat_completions_url", settings, secret_settings)
         ).strip()
         self.model: str = str(self._get_setting("model", settings, secret_settings)).strip()
+        self.fallback_models: List[str] = self._get_fallback_models(settings, secret_settings)
+        self.smart_fallback_enabled: bool = self._get_bool_setting("smart_fallback_enabled", settings, secret_settings)
         self.temperature: float = float(self._get_setting("temperature", settings, secret_settings))
         self.max_tokens: int = int(self._get_setting("max_tokens", settings, secret_settings))
+        self.test_max_tokens: int = int(self._get_setting("test_max_tokens", settings, secret_settings))
         self.timeout: int = int(self._get_setting("timeout", settings, secret_settings))
+        self.min_answer_chars: int = int(self._get_setting("min_answer_chars", settings, secret_settings))
 
     @staticmethod
     def _resolve_config_path(config_path: str | Path | None) -> Path:
@@ -163,6 +201,34 @@ class OpenAIChatAPI:
         return self._coerce_bool(self._get_setting(key, config_settings, secret_settings))
 
     @staticmethod
+    def _split_models(value: Any) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [item.strip() for item in value.replace("\n", ",").split(",") if item.strip()]
+        if isinstance(value, (list, tuple)):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return []
+
+    def _get_fallback_models(self, config_settings: Dict[str, Any], secret_settings: Dict[str, Any]) -> List[str]:
+        env_value = ""
+        for key in ENV_FALLBACK_KEYS:
+            if os.getenv(key):
+                env_value = os.getenv(key, "")
+                break
+        models = self._split_models(env_value)
+        if not models:
+            models = self._split_models(secret_settings.get("fallback_models"))
+        if not models:
+            models = self._split_models(config_settings.get("fallback_models"))
+        # Hapus duplikat sambil mempertahankan urutan.
+        cleaned: List[str] = []
+        for model in models:
+            if model and model not in cleaned:
+                cleaned.append(model)
+        return cleaned
+
+    @staticmethod
     def _detect_api_key_source(env_api_key: str, secret_api_key: str, config_api_key: str) -> str:
         if env_api_key and env_api_key not in PLACEHOLDER_KEYS:
             return "Environment variable"
@@ -196,6 +262,19 @@ class OpenAIChatAPI:
             return "model kosong. Isi di config.toml atau Streamlit Secrets."
         return f"Konfigurasi API terbaca dari {self.api_key_source}."
 
+    def build_model_chain(
+        self,
+        primary_model: Optional[str] = None,
+        fallback_models: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Susun urutan model: model awal dulu, lalu fallback. Request berikutnya tetap mulai dari awal."""
+        chain: List[str] = []
+        for model in [primary_model or self.model, *(fallback_models if fallback_models is not None else self.fallback_models)]:
+            model = str(model).strip()
+            if model and model not in chain:
+                chain.append(model)
+        return chain
+
     def generate_response(
         self,
         prompt: str,
@@ -204,6 +283,7 @@ class OpenAIChatAPI:
         model: Optional[str] = None,
         max_tokens: Optional[int] = None,
     ) -> str:
+        """Kirim satu request ke satu model."""
         if self.config_error:
             return f"Error: {self.config_error}"
         if not self.enabled:
@@ -244,6 +324,102 @@ class OpenAIChatAPI:
             return f"Error: Gagal terhubung ke API - {error}"
         except Exception as error:
             return f"Error: Gagal membaca respons API - {error}"
+
+    def generate_response_with_fallback(
+        self,
+        prompt: str,
+        context: Optional[str] = None,
+        temperature: Optional[float] = None,
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        fallback_models: Optional[List[str]] = None,
+        min_answer_chars: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Coba model awal dahulu. Jika gagal/kosong/tidak layak, naik ke model fallback.
+
+        Fungsi ini tidak mengubah self.model/session state. Karena itu, setiap request baru
+        tetap mulai dari model awal yang murah.
+        """
+        chain = self.build_model_chain(model or self.model, fallback_models)
+        attempts: List[Dict[str, Any]] = []
+        last_response = ""
+
+        for attempt_index, model_id in enumerate(chain, start=1):
+            response_text = self.generate_response(
+                prompt=prompt,
+                context=context,
+                temperature=temperature,
+                model=model_id,
+                max_tokens=max_tokens,
+            )
+            last_response = response_text
+            useful, reason = self.is_useful_response(
+                response_text,
+                prompt=prompt,
+                context=context,
+                min_answer_chars=min_answer_chars,
+            )
+            attempts.append({
+                "model": model_id,
+                "attempt": attempt_index,
+                "useful": useful,
+                "reason": reason,
+            })
+            if useful:
+                return {
+                    "success": True,
+                    "content": response_text,
+                    "model": model_id,
+                    "attempts": attempts,
+                }
+
+            if not self.smart_fallback_enabled:
+                break
+
+        return {
+            "success": False,
+            "content": last_response or "Error: Tidak ada respons dari model fallback.",
+            "model": attempts[-1]["model"] if attempts else (model or self.model),
+            "attempts": attempts,
+        }
+
+    def is_useful_response(
+        self,
+        response_text: str,
+        prompt: str = "",
+        context: Optional[str] = None,
+        min_answer_chars: Optional[int] = None,
+    ) -> tuple[bool, str]:
+        """Heuristik ringan untuk menentukan apakah jawaban cukup layak.
+
+        Tujuannya bukan menilai sempurna, tetapi mencegah jawaban kosong, error API,
+        respons terlalu pendek, atau respons generik yang jelas tidak menjawab.
+        """
+        text = (response_text or "").strip()
+        if not text:
+            return False, "respons kosong"
+        if text.startswith("Error:"):
+            return False, text[:160]
+
+        lowered = text.lower()
+        if any(pattern in lowered for pattern in UNHELPFUL_PATTERNS):
+            return False, "respons terdeteksi tidak menjawab"
+
+        if prompt and lowered == prompt.strip().lower():
+            return False, "respons sama dengan pertanyaan"
+
+        min_chars = self.min_answer_chars if min_answer_chars is None else int(min_answer_chars)
+        if len(text) < min_chars:
+            return False, f"respons terlalu pendek ({len(text)} karakter)"
+
+        combined_prompt = f"{prompt} {context or ''}".lower()
+        domain_requested = any(term in combined_prompt for term in DOMAIN_TERMS)
+        if domain_requested:
+            domain_answered = any(term in lowered for term in DOMAIN_TERMS)
+            if not domain_answered and len(text) < 180:
+                return False, "respons pendek dan tidak memuat konteks peternakan"
+
+        return True, "ok"
 
     @classmethod
     def _extract_response_text(cls, raw_text: str) -> str:
@@ -313,8 +489,8 @@ class OpenAIChatAPI:
         raise ValueError(f"format respons API tidak dikenali. Awal respons: {preview}")
 
     @classmethod
-    def _extract_from_json_fragments(cls, fragments: list[str]) -> str:
-        parts: list[str] = []
+    def _extract_from_json_fragments(cls, fragments: List[str]) -> str:
+        parts: List[str] = []
         last_full_text = ""
 
         for fragment in fragments:
@@ -343,7 +519,7 @@ class OpenAIChatAPI:
         if isinstance(content, str):
             return content
         if isinstance(content, list):
-            collected: list[str] = []
+            collected: List[str] = []
             for item in content:
                 if isinstance(item, str):
                     collected.append(item)
@@ -351,7 +527,15 @@ class OpenAIChatAPI:
                     value = item.get("text") or item.get("content")
                     if isinstance(value, str):
                         collected.append(value)
+                    elif isinstance(value, dict):
+                        nested = value.get("text") or value.get("content")
+                        if isinstance(nested, str):
+                            collected.append(nested)
             return "".join(collected)
+        if isinstance(content, dict):
+            value = content.get("text") or content.get("content")
+            if isinstance(value, str):
+                return value
         return ""
 
     @classmethod
@@ -405,13 +589,22 @@ class OpenAIChatAPI:
                 return content.strip()
 
         # Fallback untuk beberapa endpoint kompatibel yang memakai field text.
-        text = choice.get("text")
-        if isinstance(text, str) and text.strip():
-            return text.strip()
+        text_value = choice.get("text")
+        if isinstance(text_value, str) and text_value.strip():
+            return text_value.strip()
 
         # Fallback untuk format streaming chunk tunggal.
         delta_text = cls._extract_delta_text(data)
         if delta_text.strip():
             return delta_text.strip()
+
+        finish_reason = str(choice.get("finish_reason", "")).strip()
+        model = str(data.get("model", "")).strip() if isinstance(data, dict) else ""
+        if finish_reason == "length":
+            raise ValueError(
+                "respons API valid tetapi content kosong karena finish_reason=length. "
+                "Naikkan max_tokens/test_max_tokens atau gunakan fallback model."
+                + (f" Model: {model}." if model else "")
+            )
 
         raise ValueError("tidak menemukan content/text pada respons API")

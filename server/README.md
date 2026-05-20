@@ -9,12 +9,14 @@ https://api.slashai.my.id/v1/chat/completions
 ## Fitur tambahan pada versi ini
 
 - API key dibaca dari **Streamlit Secrets** agar aman untuk Streamlit Online / Community Cloud.
-- `config.toml` hanya menyimpan konfigurasi umum: endpoint, model default, temperature, max_tokens, timeout.
+- `config.toml` hanya menyimpan konfigurasi umum dan tidak menyimpan API key.
 - Daftar model dan harga per 1 juta token disimpan di `models.toml`.
-- Model bisa dipilih langsung dari sidebar Streamlit.
-- Harga input/output model tampil di sidebar sebagai referensi biaya.
-- Ada tombol **Tes koneksi API** di sidebar.
-- Jika API belum dikonfigurasi atau gagal, aplikasi tetap berjalan memakai jawaban rule-based bawaan.
+- Model awal default memakai `slashai/gpt-5-nano` karena lebih murah/ringan.
+- Fallback otomatis: jika jawaban dari model awal gagal, kosong, terlalu pendek, atau tidak menjawab, aplikasi mencoba model lain sesuai urutan fallback.
+- Setelah fallback dipakai, request berikutnya tetap kembali lagi ke model awal.
+- Sidebar menampilkan urutan percobaan model dan model yang berhasil digunakan.
+- Ada tombol **Tes koneksi API** dengan token test lebih besar agar tidak mudah terkena `finish_reason=length`.
+- Jika semua model AI gagal, aplikasi tetap berjalan memakai jawaban rule-based bawaan.
 
 ## Cara menjalankan lokal
 
@@ -69,10 +71,19 @@ File `config.toml` boleh ikut di repository karena tidak berisi API key:
 [openai]
 enabled = true
 chat_completions_url = "https://api.slashai.my.id/v1/chat/completions"
-model = "slashai/gpt-5-mini"
+model = "slashai/gpt-5-nano"
+fallback_models = [
+  "slashai/gpt-5-mini",
+  "slashai/claude-haiku-4.5",
+  "slashai/gemini-3-flash",
+  "slashai/deepseek-v3.2"
+]
+smart_fallback_enabled = true
 temperature = 0.7
-max_tokens = 1000
+max_tokens = 1600
+test_max_tokens = 200
 timeout = 60
+min_answer_chars = 30
 ```
 
 Nilai di atas juga bisa dioverride dari Streamlit Secrets bila diperlukan:
@@ -80,7 +91,8 @@ Nilai di atas juga bisa dioverride dari Streamlit Secrets bila diperlukan:
 ```toml
 [openai]
 api_key = "ISI_API_KEY_ANDA_DI_SINI"
-model = "slashai/gemini-3-flash"
+model = "slashai/gpt-5-nano"
+fallback_models = ["slashai/gpt-5-mini", "slashai/claude-haiku-4.5"]
 temperature = 0.6
 ```
 
@@ -88,14 +100,32 @@ temperature = 0.6
 
 Ada dua cara:
 
-1. Lewat sidebar aplikasi, pilih model pada bagian **Model AI**.
+1. Lewat sidebar aplikasi, pilih **Model awal AI**.
 2. Lewat `config.toml`, ubah nilai `model`, misalnya:
 
 ```toml
-model = "slashai/gemini-3-flash"
+model = "slashai/gpt-5-nano"
 ```
 
-Daftar model lengkap berada di `models.toml`. Total model yang dimasukkan: 86 model.
+Daftar fallback bisa diatur lewat `fallback_models` di `config.toml` atau Streamlit Secrets. Daftar model lengkap berada di `models.toml`. Total model yang dimasukkan: 86 model.
+
+## Cara kerja fallback otomatis
+
+Urutan default:
+
+```text
+slashai/gpt-5-nano → slashai/gpt-5-mini → slashai/claude-haiku-4.5 → slashai/gemini-3-flash → slashai/deepseek-v3.2
+```
+
+Aplikasi akan naik ke model berikutnya jika respons:
+
+- Berisi error API.
+- Kosong.
+- Terlalu pendek.
+- Terdeteksi tidak menjawab.
+- Terlihat keluar konteks peternakan/pertanian.
+
+Fallback tidak mengubah model awal secara permanen. Setiap pertanyaan baru tetap mulai dari `slashai/gpt-5-nano` atau model awal yang dipilih di sidebar.
 
 ## Urutan pembacaan API key
 
@@ -111,7 +141,7 @@ Untuk Streamlit Online, gunakan prioritas nomor 2.
 
 ```text
 app.py                            # Aplikasi Streamlit utama
-openai_integration.py             # Client API OpenAI-compatible
+openai_integration.py             # Client API OpenAI-compatible + fallback model otomatis
 model_catalog.py                  # Loader daftar model dari models.toml
 models.toml                       # Daftar model dan harga per 1 juta token
 deepseek_integration.py           # Wrapper kompatibilitas lama
@@ -148,3 +178,7 @@ Versi ini sudah memakai parser respons API yang lebih fleksibel. Aplikasi dapat 
 - NDJSON atau beberapa objek JSON yang dikirim berurutan.
 
 Error tersebut biasanya muncul saat endpoint mengembalikan beberapa objek JSON dalam satu respons, sedangkan parser lama hanya menerima satu JSON utuh.
+
+## Perbaikan error `finish_reason=length` dengan content kosong
+
+Versi ini menaikkan `test_max_tokens` menjadi `200` dan `max_tokens` menjadi `1600`. Jika API tetap mengembalikan content kosong karena `finish_reason=length`, respons tersebut dianggap tidak layak dan sistem akan mencoba fallback model berikutnya secara otomatis.

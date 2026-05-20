@@ -12,7 +12,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 DEFAULT_MODEL = {
-    "id": "slashai/gpt-5-mini",
+    "id": "slashai/gpt-5-nano",
     "provider": "slashai",
     "input_per_1m_rp": 50,
     "output_per_1m_rp": 200,

@@ -1,10 +1,16 @@
-# Contoh konfigurasi umum OpenAI-compatible Chat Completions API.
-# API key disimpan di Streamlit Secrets, bukan di config.toml.
-
 [openai]
 enabled = true
 chat_completions_url = "https://api.slashai.my.id/v1/chat/completions"
-model = "slashai/gpt-5-mini"
+model = "slashai/gpt-5-nano"
+fallback_models = [
+  "slashai/gpt-5-mini",
+  "slashai/claude-haiku-4.5",
+  "slashai/gemini-3-flash",
+  "slashai/deepseek-v3.2"
+]
+smart_fallback_enabled = true
 temperature = 0.7
-max_tokens = 1000
+max_tokens = 1600
+test_max_tokens = 200
 timeout = 60
+min_answer_chars = 30

@@ -302,6 +302,8 @@ def calculate_bep(fixed_cost, price_per_unit, variable_cost_per_unit):
 def get_bot_response(message):
     original_message = message
     message = message.lower()
+    st.session_state.last_ai_attempts = []
+    st.session_state.last_ai_model_used = ""
     
     # Try OpenAI-compatible API first for more advanced responses
     try:
@@ -310,18 +312,22 @@ def get_bot_response(message):
                             "terbaru", "penelitian", "studi", "inovasi"]
         
         if openai_client.is_configured and (any(keyword in message.lower() for keyword in complex_keywords) or len(message.split()) > 6):
-            # This question seems complex, use OpenAI-compatible endpoint for better response
-            with st.spinner('Mencari jawaban dengan OpenAI API...'):
-                openai_response = openai_client.generate_response(
+            # Pertanyaan kompleks: mulai dari model awal yang murah, lalu naik ke fallback bila respons gagal/kosong/tidak menjawab.
+            with st.spinner('Mencari jawaban dengan AI...'):
+                ai_result = openai_client.generate_response_with_fallback(
                     prompt=original_message,
-                    context="Informasi tentang peternakan di Indonesia, termasuk jenis ternak, perawatan, pakan, dan praktik terbaik. Berikan informasi yang akurat, ringkas, dan bermanfaat untuk peternak Indonesia.",
+                    context="Informasi tentang peternakan di Indonesia, termasuk jenis ternak, perawatan, pakan, dan praktik terbaik. Berikan informasi yang akurat, ringkas, dan bermanfaat untuk peternak Indonesia. Jangan keluar dari konteks peternakan/pertanian. Jika pertanyaan tidak relevan, arahkan kembali ke topik peternakan.",
                     temperature=st.session_state.get("selected_temperature", openai_client.temperature),
                     model=st.session_state.get("selected_ai_model", openai_client.model),
+                    fallback_models=st.session_state.get("selected_fallback_models", openai_client.fallback_models),
+                    max_tokens=openai_client.max_tokens,
                 )
-                
-                if openai_response and not openai_response.startswith("Error:"):
-                    return openai_response
-            # If OpenAI endpoint fails, fall back to rule-based responses
+                st.session_state.last_ai_attempts = ai_result.get("attempts", [])
+                st.session_state.last_ai_model_used = ai_result.get("model", "")
+
+                if ai_result.get("success") and ai_result.get("content"):
+                    return ai_result["content"]
+            # If all AI models failed, fall back to rule-based responses
     except Exception as e:
         print(f"OpenAI API error: {str(e)}")
     
@@ -468,32 +474,56 @@ with st.sidebar:
     model_ids = [model["id"] for model in model_catalog]
     default_model = openai_client.model if openai_client.model in model_ids else model_catalog[0]["id"]
     selected_model_id = st.selectbox(
-        "Model AI",
+        "Model awal AI",
         options=model_ids,
         index=model_ids.index(default_model),
         format_func=lambda model_id: format_model_option(next(model for model in model_catalog if model["id"] == model_id)),
-        help="Daftar model dan harga dibaca dari models.toml.",
+        help="Model ini selalu dicoba lebih dulu pada setiap pertanyaan. Default: slashai/gpt-5-nano.",
     )
     st.session_state.selected_ai_model = selected_model_id
 
     selected_model_info = next(model for model in model_catalog if model["id"] == selected_model_id)
     st.caption(
-        f"Biaya: input {format_rupiah(selected_model_info['input_per_1m_rp'])}/1M token, "
+        f"Biaya model awal: input {format_rupiah(selected_model_info['input_per_1m_rp'])}/1M token, "
         f"output {format_rupiah(selected_model_info['output_per_1m_rp'])}/1M token"
     )
+
+    default_fallback_models = [model for model in openai_client.fallback_models if model in model_ids and model != selected_model_id]
+    selected_fallback_models = st.multiselect(
+        "Fallback model otomatis",
+        options=[model_id for model_id in model_ids if model_id != selected_model_id],
+        default=default_fallback_models,
+        format_func=lambda model_id: format_model_option(next(model for model in model_catalog if model["id"] == model_id)),
+        help="Dipakai hanya jika model awal gagal, kosong, terlalu pendek, atau tidak menjawab. Request berikutnya tetap kembali ke model awal.",
+    )
+    st.session_state.selected_fallback_models = selected_fallback_models
+
+    fallback_chain = openai_client.build_model_chain(selected_model_id, selected_fallback_models)
+    st.caption("Urutan percobaan: " + " → ".join(fallback_chain))
+
     if st.button("Tes koneksi API"):
         with st.spinner("Mengetes koneksi API..."):
-            test_response = openai_client.generate_response(
-                prompt="Balas singkat dengan kata: aktif",
-                context="Anda hanya perlu membalas singkat untuk tes koneksi API.",
+            test_result = openai_client.generate_response_with_fallback(
+                prompt="Balas tepat dengan kata: aktif",
+                context="Tes koneksi API. Balas hanya satu kata: aktif.",
                 temperature=0,
                 model=selected_model_id,
-                max_tokens=20,
+                fallback_models=selected_fallback_models,
+                max_tokens=openai_client.test_max_tokens,
+                min_answer_chars=1,
             )
-        if test_response.startswith("Error:"):
-            st.error(test_response)
+        attempt_text = ", ".join(
+            f"{item['model']} ({'ok' if item['useful'] else item['reason']})"
+            for item in test_result.get("attempts", [])
+        )
+        if test_result.get("success"):
+            st.success(f"Tes berhasil dengan {test_result.get('model')}: {test_result.get('content')}")
+            if attempt_text:
+                st.caption(f"Percobaan: {attempt_text}")
         else:
-            st.success(f"Tes berhasil: {test_response}")
+            st.error(test_result.get("content", "Tes koneksi gagal."))
+            if attempt_text:
+                st.caption(f"Percobaan: {attempt_text}")
 
     st.session_state.selected_temperature = st.slider(
         "Temperature",
@@ -544,6 +574,13 @@ if tool_option == "Chat":
         with st.chat_message("assistant"):
             response = get_bot_response(prompt)
             st.markdown(response)
+            if st.session_state.get("last_ai_model_used"):
+                attempts = st.session_state.get("last_ai_attempts", [])
+                attempt_summary = " → ".join(
+                    f"{item['model']}" + (" ✓" if item.get("useful") else " ✗")
+                    for item in attempts
+                )
+                st.caption(f"Model dipakai: {st.session_state.last_ai_model_used}. Urutan: {attempt_summary}")
         st.session_state.messages.append({"role": "assistant", "content": response})
 
 elif tool_option == "Kalkulator Pakan":

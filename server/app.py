@@ -168,6 +168,9 @@ def init_state() -> None:
         "last_health_case": {},
         "last_ai_insight": {},
         "formula_selected": ["rumput odot", "dedak", "ampas tahu", "mineral mix"],
+        "confirm_reset_chat_nonce": 0,
+        "confirm_reset_farm_nonce": 0,
+        "reset_notice": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -1734,17 +1737,22 @@ with st.sidebar:
         except Exception as error:
             st.error(f"Gagal membuat backup sebelum hapus: {error}")
 
+        if st.session_state.reset_notice:
+            st.success(st.session_state.reset_notice)
+            st.session_state.reset_notice = ""
+
         st.markdown("**Apakah database sudah Anda download?**")
+        reset_chat_key = f"confirm_reset_chat_downloaded_{st.session_state.confirm_reset_chat_nonce}"
         reset_chat_confirm = st.checkbox(
             "Ya, saya sudah download database XLSX sebelum Reset Chat.",
-            key="confirm_reset_chat_downloaded",
+            key=reset_chat_key,
         )
         col_a, col_b = st.columns(2)
         with col_a:
             if st.button("Reset Chat", use_container_width=True, disabled=not reset_chat_confirm):
                 reset_chat()
-                st.session_state.confirm_reset_chat_downloaded = False
-                st.success("Chat berhasil direset. Data dapat dipulihkan dari backup XLSX yang sudah diunduh.")
+                st.session_state.confirm_reset_chat_nonce += 1
+                st.session_state.reset_notice = "Chat berhasil direset. Data dapat dipulihkan dari backup XLSX yang sudah diunduh."
                 st.rerun()
         with col_b:
             st.download_button(
@@ -1758,14 +1766,15 @@ with st.sidebar:
         if st.session_state.admin_authenticated:
             st.divider()
             st.markdown("**Hapus/reset data farm hanya untuk admin.**")
+            reset_farm_key = f"confirm_reset_farm_downloaded_{st.session_state.confirm_reset_farm_nonce}"
             reset_farm_confirm = st.checkbox(
                 "Ya, saya sudah download database XLSX sebelum Reset Data Farm.",
-                key="confirm_reset_farm_downloaded",
+                key=reset_farm_key,
             )
             if st.button("Reset Data Farm", use_container_width=True, disabled=not reset_farm_confirm):
                 reset_farm_data()
-                st.session_state.confirm_reset_farm_downloaded = False
-                st.success("Data farm berhasil direset. Gunakan file XLSX untuk memulihkan data lama bila diperlukan.")
+                st.session_state.confirm_reset_farm_nonce += 1
+                st.session_state.reset_notice = "Data farm berhasil direset. Gunakan file XLSX untuk memulihkan data lama bila diperlukan."
                 st.rerun()
 
         (

@@ -270,7 +270,7 @@ Fitur tambahan:
 - **Keuangan enterprise**: transaksi pendapatan/biaya, total biaya, margin kasar, HPP per ekor/unit, HPP per kg gain, dan ROI estimasi.
 - **Knowledge Base / RAG ringan**: admin dapat menambahkan SOP, standar perusahaan, atau catatan teknis yang ikut masuk Memory Ahli dan Backup XLSX.
 - **Hilirisasi / Teknologi Hasil**: checklist mutu daging, susu, telur, dan ikan konsumsi sesuai tujuan pemeliharaan.
-- **Database permanen opsional**: mendukung local temp save dan Supabase REST jika dikonfigurasi melalui Secrets.
+- **Database permanen opsional**: mendukung local temp save, Supabase PostgreSQL via `DATABASE_URL`/host, dan Supabase REST legacy jika dikonfigurasi melalui Secrets.
 - **Template notifikasi**: pesan siap salin untuk WhatsApp/Telegram/Email berdasarkan early warning.
 - **Audit trail**: mencatat perubahan data penting, input harian, transaksi, knowledge base, dan sinkronisasi database.
 
@@ -290,29 +290,72 @@ Manajemen Enterprise
 └── Audit Trail
 ```
 
-### Opsional: Supabase Database
+### Opsional: Supabase Database PostgreSQL
 
-Buat tabel Supabase minimal:
+Untuk Streamlit Online, jangan gunakan file `.env`. Masukkan konfigurasi database lewat **App settings → Secrets**.
+
+Aplikasi dapat membuat tabel otomatis jika user database memiliki izin `CREATE TABLE`. Jika ingin membuat manual, jalankan SQL berikut di Supabase SQL Editor:
 
 ```sql
-create table if not exists ai_pakar_ternak_sessions (
-  session_id text primary key,
-  updated_at text,
-  payload jsonb
+CREATE TABLE IF NOT EXISTS ai_pakar_ternak_sessions (
+    session_id TEXT PRIMARY KEY,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    payload JSONB NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_ai_pakar_ternak_sessions_updated_at
+ON ai_pakar_ternak_sessions (updated_at DESC);
 ```
 
-Tambahkan ke Streamlit Secrets:
+Gunakan konfigurasi Secrets berikut:
 
 ```toml
 [database]
-provider = "supabase"
-supabase_url = "https://PROJECT.supabase.co"
-supabase_key = "ISI_SUPABASE_KEY"
+provider = "postgres"
+host = "db.huhezxjjnypthgbafmdv.supabase.co"
+port = 5432
+database = "postgres"
+user = "postgres"
+password = "ISI_PASSWORD_DATABASE_SUPABASE"
+sslmode = "require"
 table = "ai_pakar_ternak_sessions"
 ```
 
+Atau gunakan satu baris koneksi:
+
+```toml
+[database]
+provider = "postgres"
+database_url = "postgresql://postgres:ISI_PASSWORD_DATABASE_SUPABASE@db.huhezxjjnypthgbafmdv.supabase.co:5432/postgres?sslmode=require"
+table = "ai_pakar_ternak_sessions"
+```
+
+Untuk local development saja, boleh memakai `.env` berdasarkan `.env.example`:
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+Catatan keamanan:
+
+- Jangan commit `.env` atau password Supabase ke GitHub.
+- Gunakan **Streamlit Secrets** untuk deployment online.
+- Backup XLSX tetap disarankan sebelum reset/hapus data.
+
 Jika Supabase belum dikonfigurasi, aplikasi tetap berjalan memakai local temp save dan Backup XLSX.
+
+### Tes koneksi database di aplikasi
+
+Setelah Secrets disimpan dan aplikasi di-reboot:
+
+1. Buka aplikasi **AI Pakar Ternak**.
+2. Pilih menu utama **Database Supabase**.
+3. Masukkan **Kunci admin** jika belum login Admin Mode.
+4. Klik **Tes Koneksi Database**.
+5. Jika berhasil, gunakan **Simpan ke Database** untuk menyimpan sesi aktif atau **Muat dari Database** untuk memulihkan data berdasarkan Session ID.
+
+Menu **Database Supabase** sengaja dibuat sebagai menu utama agar tidak tersembunyi di tab Enterprise.
 
 ## Optimasi Responsivitas Dropdown/Menu
 

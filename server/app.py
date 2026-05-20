@@ -120,7 +120,7 @@ from enterprise_features import (
     enterprise_context,
     enterprise_report_markdown,
 )
-from enterprise_storage import get_storage_config, save_payload as save_enterprise_payload, load_payload as load_enterprise_payload
+from enterprise_storage import get_storage_config, save_payload as save_enterprise_payload, load_payload as load_enterprise_payload, test_connection as test_enterprise_database_connection
 
 PROJECT_DIR = Path(__file__).resolve().parent
 SESSION_BACKUP_DIR = Path(tempfile.gettempdir()) / "ai_pakar_ternak_sessions"
@@ -154,6 +154,7 @@ APP_MODES = [
     "Konsultasi AI",
     "Insight & Keputusan",
     "Manajemen Enterprise",
+    "Database Supabase",
     "Alat Hitung",
     "Edukasi & Laporan",
 ]
@@ -2333,13 +2334,43 @@ def render_downstream_center() -> None:
 
 def render_database_sync_center() -> None:
     st.subheader("Database Permanen Opsional")
-    st.caption("Streamlit Cloud bisa restart. Untuk permanen sungguhan, hubungkan ke Supabase melalui Secrets. XLSX tetap menjadi backup offline.")
+    st.caption("Streamlit Cloud bisa restart. Untuk permanen sungguhan, hubungkan ke Supabase PostgreSQL melalui Secrets. XLSX tetap menjadi backup offline.")
     state = _enterprise_state()
     cfg = get_storage_config(st.secrets)
-    st.write(f"Provider: **{cfg.get('provider')}** | Status: **{cfg.get('configured')}**")
-    with st.expander("Contoh Secrets Supabase", expanded=False):
-        st.code('[database]\nprovider = "supabase"\nsupabase_url = "https://PROJECT.supabase.co"\nsupabase_key = "SERVICE_ROLE_OR_ANON_KEY"\ntable = "ai_pakar_ternak_sessions"', language="toml")
-        st.caption("Tabel minimal: session_id text unique, updated_at timestamp/text, payload jsonb.")
+    status_label = cfg.get("configured")
+    mode_label = cfg.get("mode")
+    st.write(f"Provider: **{cfg.get('provider')}** | Mode: **{mode_label}** | Status: **{status_label}**")
+    if cfg.get("mode") == "postgres":
+        st.caption(f"Host: {cfg.get('host') or 'via DATABASE_URL'} | Database: {cfg.get('database')} | Table: {cfg.get('table')}")
+
+    with st.expander("Contoh Secrets Supabase PostgreSQL", expanded=False):
+        st.code("""[database]
+provider = "postgres"
+host = "db.huhezxjjnypthgbafmdv.supabase.co"
+port = 5432
+database = "postgres"
+user = "postgres"
+password = "ISI_PASSWORD_DATABASE_SUPABASE"
+sslmode = "require"
+table = "ai_pakar_ternak_sessions""".strip(), language="toml")
+        st.caption("Masukkan di Streamlit App settings → Secrets. Jangan simpan password database di repository publik.")
+
+    with st.expander("Alternatif: DATABASE_URL", expanded=False):
+        st.code("""[database]
+provider = "postgres"
+database_url = "postgresql://postgres:ISI_PASSWORD@db.huhezxjjnypthgbafmdv.supabase.co:5432/postgres?sslmode=require"
+table = "ai_pakar_ternak_sessions""".strip(), language="toml")
+
+    if st.button("Tes Koneksi Database", width="stretch"):
+        try:
+            result = test_enterprise_database_connection(st.secrets)
+            if result.get("ok"):
+                st.success(result.get("message", "Koneksi berhasil."))
+            else:
+                st.warning(result.get("message", "Koneksi belum siap."))
+        except Exception as error:
+            st.error(f"Tes koneksi database gagal: {error}")
+
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Simpan ke Database", width="stretch"):
@@ -2361,8 +2392,81 @@ def render_database_sync_center() -> None:
             else:
                 st.warning(msg)
     if state.get("last_sync_status"):
-        st.json(state["last_sync_status"])
+        safe_status = dict(state["last_sync_status"])
+        for secret_key in ("password", "supabase_key", "database_url"):
+            safe_status.pop(secret_key, None)
+        st.json(safe_status)
 
+
+def render_database_admin_gate() -> bool:
+    """Show a dedicated admin gate for the Database Supabase page."""
+    password, password_source = get_admin_password()
+    if not password:
+        st.warning("Admin Mode belum aktif. Tambahkan [admin] password di Streamlit Secrets terlebih dahulu.")
+        st.code(
+            """[admin]
+password = "ISI_KUNCI_ADMIN_ANDA"
+
+[database]
+provider = "postgres"
+host = "db.huhezxjjnypthgbafmdv.supabase.co"
+port = 5432
+database = "postgres"
+user = "postgres"
+password = "ISI_PASSWORD_DATABASE_SUPABASE"
+sslmode = "require"
+table = "ai_pakar_ternak_sessions""".strip(),
+            language="toml",
+        )
+        return False
+
+    if st.session_state.get("admin_authenticated", False):
+        st.success(f"Admin Mode aktif · sumber kunci: {password_source}")
+        return True
+
+    st.info("Database Supabase hanya dapat dibuka oleh admin agar data peternak dan konfigurasi database tetap aman.")
+    with st.form("database_page_admin_login_form", clear_on_submit=True):
+        candidate = st.text_input("Kunci admin", type="password", placeholder="Masukkan kunci admin")
+        submitted = st.form_submit_button("Buka Database Supabase", width="stretch")
+        if submitted:
+            if check_admin_password(candidate):
+                st.session_state.admin_authenticated = True
+                st.session_state.admin_login_error = ""
+                st.success("Admin Mode aktif. Halaman database akan dimuat ulang.")
+                safe_rerun()
+            else:
+                st.session_state.admin_login_error = "Kunci admin salah."
+    if st.session_state.get("admin_login_error"):
+        st.error(st.session_state.admin_login_error)
+    return False
+
+
+def render_database_supabase_page() -> None:
+    st.header("Database Supabase")
+    st.caption("Tes koneksi, simpan sesi, dan pulihkan data AI Pakar Ternak dari Supabase PostgreSQL.")
+
+    st.info(
+        "Urutan penggunaan: 1) isi Secrets di Streamlit, 2) reboot app, 3) masuk Admin Mode, "
+        "4) klik Tes Koneksi Database, 5) simpan atau pulihkan data."
+    )
+
+    if not render_database_admin_gate():
+        return
+
+    render_database_sync_center()
+
+    with st.expander("SQL tabel Supabase jika ingin dibuat manual", expanded=False):
+        st.code(
+            """CREATE TABLE IF NOT EXISTS ai_pakar_ternak_sessions (
+    session_id TEXT PRIMARY KEY,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    payload JSONB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_pakar_ternak_sessions_updated_at
+ON ai_pakar_ternak_sessions (updated_at DESC);""".strip(),
+            language="sql",
+        )
 
 def render_notification_center() -> None:
     st.subheader("Notifikasi WhatsApp/Telegram - Template")
@@ -2641,6 +2745,8 @@ elif tool_option == "Insight & Keputusan":
     safe_render("Insight & Keputusan", render_decision_center, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
 elif tool_option == "Manajemen Enterprise":
     safe_render("Manajemen Enterprise", render_enterprise_center, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+elif tool_option == "Database Supabase":
+    safe_render("Database Supabase", render_database_supabase_page)
 elif tool_option == "Alat Hitung":
     safe_render("Alat Hitung", render_tools_center)
 elif tool_option == "Edukasi & Laporan":

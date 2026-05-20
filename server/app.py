@@ -84,6 +84,16 @@ from ugm_departments import (
     department_prompt_for_text,
     report_section_markdown,
 )
+from farm_memory import (
+    MEMORY_CATEGORIES,
+    PRIORITIES,
+    memory_context,
+    memory_from_secrets,
+    memory_table_rows,
+    normalise_memory_items,
+    make_memory_item,
+    suggest_memory_from_session,
+)
 from expert_rules import (
     build_expert_context,
     decision_card_from_answer,
@@ -187,6 +197,8 @@ def init_state() -> None:
         "last_risk_score": {},
         "decision_log": [],
         "education_progress": [],
+        "expert_memory": [],
+        "expert_memory_suggestions": [],
         "farm_profile": dict(DEFAULT_PROFILE),
         "farm_records": [],
         "farm_calendar_events": [],
@@ -323,6 +335,8 @@ def build_current_session_payload() -> Dict[str, Any]:
             "last_risk_score": st.session_state.last_risk_score,
             "decision_log": st.session_state.decision_log,
             "education_progress": st.session_state.education_progress,
+            "expert_memory": normalise_memory_items(st.session_state.expert_memory),
+            "active_memory_rows": memory_table_rows(st.session_state.expert_memory, get_secret_memory_items()),
         },
     )
 
@@ -347,6 +361,7 @@ def build_pdf_report_context() -> Dict[str, Any]:
         "risk": farm_risk_score(profile, records, calendar_events, health_case, st.session_state.biosecurity_checked),
         "local_insights": local_operational_insights(profile, records, calendar_events, health_case),
         "department_coverage": department_coverage_check(profile, records, calendar_events, health_case, {"formula_selected": st.session_state.formula_selected, "decision_log": st.session_state.decision_log}),
+        "memory_rows": memory_table_rows(st.session_state.expert_memory, get_secret_memory_items()),
     }
 
 
@@ -389,6 +404,7 @@ def restore_session_from_payload(payload: Dict[str, Any]) -> None:
     st.session_state.last_risk_score = dict(app_state.get("last_risk_score", {}) or {})
     st.session_state.decision_log = list(app_state.get("decision_log", []) or [])
     st.session_state.education_progress = list(app_state.get("education_progress", []) or [])
+    st.session_state.expert_memory = normalise_memory_items(app_state.get("expert_memory", []) or [])
     st.session_state.session_request_count = int(float(usage.get("requests", 0) or 0))
     st.session_state.session_prompt_tokens = int(float(usage.get("prompt_tokens", 0) or 0))
     st.session_state.session_completion_tokens = int(float(usage.get("completion_tokens", 0) or 0))
@@ -411,6 +427,31 @@ def safe_dict(value: Any) -> Dict[str, Any]:
         return dict(value)
     except Exception:
         return {}
+
+
+
+def get_secret_memory_items() -> List[Dict[str, Any]]:
+    try:
+        return memory_from_secrets(st.secrets)
+    except Exception:
+        return []
+
+
+def get_active_memory_context() -> str:
+    return memory_context(
+        st.session_state.get("expert_memory", []),
+        get_secret_memory_items(),
+        include_default=True,
+    )
+
+
+def add_expert_memory(memory: str, category: str = "Catatan Lapangan", priority: str = "Sedang", source: str = "manual") -> None:
+    item = make_memory_item(memory, category=category, priority=priority, source=source)
+    if not item.get("memory"):
+        return
+    current = normalise_memory_items(st.session_state.get("expert_memory", []))
+    current.append(item)
+    st.session_state.expert_memory = normalise_memory_items(current)[-200:]
 
 
 def get_admin_password() -> Tuple[str, str]:
@@ -463,6 +504,80 @@ def plot_bep(fixed_cost: float, price_per_unit: float, variable_cost_per_unit: f
     ax.legend()
     return fig
 
+
+
+def render_memory_admin() -> None:
+    st.subheader("Memory Ahli")
+    st.caption(
+        "Memory default selalu aktif dari kode. Memory tambahan dapat berasal dari Streamlit Secrets atau ditambahkan admin, lalu ikut tersimpan di Backup XLSX."
+    )
+    secret_items = get_secret_memory_items()
+    dynamic_items = normalise_memory_items(st.session_state.get("expert_memory", []))
+    rows = memory_table_rows(dynamic_items, secret_items, include_default=True)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Default + aktif", len(rows))
+    c2.metric("Dari Secrets", len(secret_items))
+    c3.metric("Memory berkembang", len(dynamic_items))
+    with st.expander("Lihat memory aktif", expanded=False):
+        st.dataframe(rows, width="stretch", hide_index=True)
+    with st.form("add_expert_memory_form", clear_on_submit=True):
+        category = st.selectbox("Kategori memory", MEMORY_CATEGORIES, index=MEMORY_CATEGORIES.index("Strategi Perusahaan"))
+        priority = st.selectbox("Prioritas", PRIORITIES, index=0)
+        memory_text = st.text_area(
+            "Isi memory baru",
+            placeholder="Contoh: Untuk rekomendasi level direksi, selalu tampilkan risiko, prioritas, KPI, dampak biaya, dan tindak lanjut 30 hari.",
+            height=120,
+        )
+        submitted = st.form_submit_button("Simpan Memory", width="stretch")
+        if submitted:
+            if memory_text.strip():
+                add_expert_memory(memory_text, category=category, priority=priority, source="admin_manual")
+                autosave_session_xlsx()
+                st.success("Memory baru disimpan dan akan ikut masuk Backup XLSX.")
+            else:
+                st.warning("Isi memory belum diisi.")
+    with st.expander("Kembangkan memory dari data sesi", expanded=False):
+        st.write("Sistem dapat membuat saran memory dari profil, pakan tersedia, masalah utama, recording, dan log keputusan AI.")
+        suggestions = suggest_memory_from_session(
+            normalise_profile(st.session_state.farm_profile),
+            st.session_state.farm_records,
+            st.session_state.decision_log,
+        )
+        if suggestions:
+            st.dataframe(memory_table_rows(suggestions, [], include_default=False), width="stretch", hide_index=True)
+            if st.button("Tambahkan Saran ke Memory", width="stretch"):
+                current = normalise_memory_items(st.session_state.get("expert_memory", []))
+                st.session_state.expert_memory = normalise_memory_items(current + suggestions)[-200:]
+                autosave_session_xlsx()
+                st.success("Saran memory ditambahkan.")
+                safe_rerun()
+        else:
+            st.info("Belum ada data sesi yang cukup untuk membuat saran memory.")
+    with st.expander("Format Streamlit Secrets untuk memory permanen", expanded=False):
+        secret_example = """[expert_memory]
+organization_context = "AI Pakar Ternak digunakan untuk mendukung keputusan peternakan hulu-hilir berstandar akademik dan industri."
+strategic_role = "Jawaban harus sesuai kebutuhan pimpinan/direktur utama: ringkas, berbasis risiko, KPI, biaya, prioritas, dan rencana eksekusi."
+notes = [
+  "Selalu bedakan rekomendasi untuk peternak rakyat dan industri modern.",
+  "Gunakan kerangka 5 departemen Fakultas Peternakan UGM untuk membaca masalah hulu-hilir."
+]
+
+[[expert_memory.items]]
+category = "Strategi Perusahaan"
+priority = "Tinggi"
+memory = "Setiap insight manajemen harus menyebut dampak biaya, risiko operasional, prioritas, dan target 7/30 hari."
+"""
+        st.code(secret_example, language="toml")
+        st.caption("Catatan: aplikasi tidak bisa menulis langsung ke Secrets Streamlit Cloud. Salin memory penting ke Secrets bila ingin selalu permanen tanpa upload XLSX.")
+    if dynamic_items:
+        st.warning("Sebelum menghapus memory berkembang, pastikan Backup XLSX sudah diunduh.")
+        clear_memory_key = f"confirm_clear_memory_downloaded_{st.session_state.get('confirm_clear_log_nonce', 0)}"
+        confirm = st.checkbox("Ya, saya sudah download database XLSX sebelum menghapus memory berkembang.", key=clear_memory_key)
+        if st.button("Hapus Memory Berkembang", width="stretch", disabled=not confirm):
+            st.session_state.expert_memory = []
+            st.session_state.confirm_clear_log_nonce += 1
+            st.success("Memory berkembang dihapus. Memory default dan memory dari Secrets tetap aktif.")
+            safe_rerun()
 
 def render_admin_panel(
     model_ids: List[str],
@@ -566,6 +681,8 @@ def render_admin_panel(
         else:
             st.error(test.get("content", "Tes gagal."))
 
+    render_memory_admin()
+
     if bool(ui_config.get("show_debug", False)):
         with st.expander("Debug konfigurasi"):
             st.write("Config:", str(client.config_path))
@@ -604,7 +721,7 @@ def run_ai_consultation(prompt: str, selected_model_id: str, selected_fallback_m
         "profile": st.session_state.farm_profile,
         "records": st.session_state.farm_records,
         "calendar_events": st.session_state.farm_calendar_events,
-        "extra_context": (audience_context(st.session_state.user_mode, st.session_state.explanation_level) + "\n" + expert_context + "\n" + extra_context).strip(),
+        "extra_context": (audience_context(st.session_state.user_mode, st.session_state.explanation_level) + "\n" + get_active_memory_context() + "\n" + expert_context + "\n" + extra_context).strip(),
         "user_mode": st.session_state.user_mode,
     }
     try:

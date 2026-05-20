@@ -142,6 +142,34 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+
+## Memory Ahli
+
+Sistem sekarang memakai tiga lapisan memory:
+
+1. **Default expert memory** di kode aplikasi: selalu aktif setelah deploy/restart dan membentuk AI sebagai ahli peternakan hulu-hilir.
+2. **Streamlit Secrets memory**: memory permanen yang bisa disalin admin ke `App settings → Secrets`, cocok untuk konteks perusahaan, standar direksi, atau aturan strategis yang harus selalu ada.
+3. **Memory berkembang**: memory yang ditambahkan admin dari panel aplikasi atau dari saran data sesi. Memory ini ikut tersimpan di Backup XLSX dan akan aktif kembali saat XLSX dipulihkan.
+
+Contoh Secrets tambahan:
+
+```toml
+[expert_memory]
+organization_context = "AI Pakar Ternak digunakan untuk mendukung keputusan peternakan hulu-hilir berstandar akademik dan industri."
+strategic_role = "Jawaban harus sesuai kebutuhan pimpinan/direktur utama: ringkas, berbasis risiko, KPI, biaya, prioritas, dan rencana eksekusi."
+notes = [
+  "Selalu bedakan rekomendasi untuk peternak rakyat dan industri modern.",
+  "Gunakan kerangka 5 departemen Fakultas Peternakan UGM untuk membaca masalah hulu-hilir."
+]
+
+[[expert_memory.items]]
+category = "Strategi Perusahaan"
+priority = "Tinggi"
+memory = "Setiap insight manajemen harus menyebut dampak biaya, risiko operasional, prioritas, dan target 7/30 hari."
+```
+
+Catatan: Streamlit Cloud tidak menyediakan database permanen otomatis untuk data yang ditulis aplikasi. Karena itu memory berkembang disimpan ke XLSX, sedangkan memory yang harus selalu hidup setelah restart sebaiknya dimasukkan ke Secrets.
+
 ## Streamlit Online Secrets
 
 Masukkan di **App settings → Secrets**:

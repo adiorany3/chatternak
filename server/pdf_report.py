@@ -169,6 +169,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     usage = payload.get("usage", {}) or {}
     app_state = payload.get("app_state", {}) or {}
     decision_log = app_state.get("decision_log", []) or []
+    memory_rows = context.get("memory_rows", []) or []
     benchmark = context.get("benchmark", {}) or {}
     readiness = context.get("readiness", {}) or {}
     risk = context.get("risk", {}) or app_state.get("last_risk_score", {}) or {}
@@ -431,7 +432,22 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     else:
         story.append(_make_paragraph("Belum ada log keputusan AI. Setiap insight/konsultasi penting akan tersimpan agar dapat dievaluasi kembali.", styles["Body"]))
 
-    story.append(_make_paragraph("7. Catatan Penutup", styles["SectionTitle"]))
+    story.append(_make_paragraph("7. Memory Ahli dan Penguatan Keputusan", styles["SectionTitle"]))
+    if memory_rows:
+        mem_data = [["Kategori", "Prioritas", "Memory", "Sumber"]]
+        for item in memory_rows[:12]:
+            mem_data.append([
+                _text(item.get("Kategori")),
+                _text(item.get("Prioritas")),
+                _make_paragraph(item.get("Memory", "-"), styles["Small"]),
+                _text(item.get("Sumber")),
+            ])
+        story.append(_make_paragraph("Memory ini membantu AI konsisten sebagai ahli peternakan hulu-hilir, baik untuk peternak rakyat maupun kebutuhan keputusan level industri/direksi.", styles["Body"]))
+        story.append(_make_table(mem_data, [3.2 * cm, 2.2 * cm, 8.4 * cm, 2.2 * cm]))
+    else:
+        story.append(_make_paragraph("Memory default pakar aktif dari kode aplikasi. Tambahkan memory berkembang melalui Admin Mode atau Streamlit Secrets untuk kebutuhan perusahaan/farm tertentu.", styles["Body"]))
+
+    story.append(_make_paragraph("8. Catatan Penutup", styles["SectionTitle"]))
     story.append(_make_paragraph(
         "Laporan ini disusun dari data yang diinput pengguna. Akurasi rekomendasi bergantung pada kelengkapan data lapangan. Untuk kasus darurat, kematian mendadak, demam tinggi, sesak napas, diare berdarah, kembung berat, atau penurunan produksi drastis, segera hubungi dokter hewan/paramedik setempat.",
         styles["Body"],

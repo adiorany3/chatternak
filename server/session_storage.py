@@ -12,9 +12,10 @@ from openpyxl.utils import get_column_letter
 from ugm_departments import UGM_DEPARTMENTS, HULU_HILIR_FLOW, department_coverage_check
 from commodity_breeds import catalog_rows, commodity_label
 from farm_profile import goal_label, maintenance_goal_rows
+from farm_memory import memory_table_rows, normalise_memory_items
 
 APP_NAME = "AI Pakar Ternak"
-STORAGE_VERSION = "1.4"
+STORAGE_VERSION = "1.5"
 
 HEADER_FILL = "166534"
 SUBHEADER_FILL = "DCFCE7"
@@ -63,6 +64,7 @@ INSIGHT_HEADERS = ["Kolom", "Isi"]
 USAGE_HEADERS = ["Metrik", "Nilai"]
 FORMULA_HEADERS = ["No", "Bahan Pakan Terpilih"]
 DECISION_LOG_HEADERS = ["Tanggal", "Pertanyaan/Masalah", "Keputusan Utama", "Prioritas", "Level Risiko", "Skor Risiko", "Sumber", "Model", "Status Tindak Lanjut", "Catatan Hasil"]
+MEMORY_HEADERS = ["Tanggal", "Kategori", "Prioritas", "Memory", "Sumber"]
 
 
 def _json_default(value: Any) -> str:
@@ -266,6 +268,7 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
         ("Mode Pengguna", app_state.get("user_mode", "")),
         ("Kedalaman Penjelasan", app_state.get("explanation_level", "")),
         ("SOP Terakhir", (app_state.get("last_sop") or {}).get("type", "") if isinstance(app_state.get("last_sop"), dict) else ""),
+        ("Memory Berkembang", len(app_state.get("expert_memory", []) or []) if isinstance(app_state, dict) else 0),
     ]
     ws.cell(4, 1, "Metrik")
     ws.cell(4, 2, "Nilai")
@@ -667,6 +670,25 @@ def import_session_xlsx(file_or_bytes: Any) -> Dict[str, Any]:
                 "result_note": str(ws.cell(row, 10).value or ""),
             })
         payload.setdefault("app_state", {})["decision_log"] = decision_log
+
+    if "Memory_Ahli" in wb.sheetnames:
+        ws = wb["Memory_Ahli"]
+        memory_items = []
+        for row in range(5, ws.max_row + 1):
+            memory = ws.cell(row, 4).value
+            if not memory or str(memory).startswith("Belum"):
+                continue
+            source_value = str(ws.cell(row, 5).value or "xlsx_import")
+            if source_value == "default":
+                continue
+            memory_items.append({
+                "created_at": str(ws.cell(row, 1).value or ""),
+                "category": str(ws.cell(row, 2).value or "Catatan Lapangan"),
+                "priority": str(ws.cell(row, 3).value or "Sedang"),
+                "memory": str(memory),
+                "source": source_value if source_value != "streamlit_secrets" else "xlsx_import_secrets",
+            })
+        payload.setdefault("app_state", {})["expert_memory"] = normalise_memory_items(memory_items)
 
     if "Pemakaian_AI" in wb.sheetnames:
         ws = wb["Pemakaian_AI"]

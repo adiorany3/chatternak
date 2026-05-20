@@ -40,7 +40,7 @@ DEFAULT_WEIGHTS: Dict[str, float] = {
 
 FARMING_KNOWLEDGE: Dict[str, Dict[str, str]] = {
     "sapi": {
-        "info": "Sapi adalah ternak ruminansia utama untuk daging, susu, bibit, dan tenaga kerja. Di Indonesia, sapi Bali, Madura, PO, Simental, Limosin, dan FH sering dipelihara sesuai tujuan usaha.",
+        "info": "Sapi adalah ternak ruminansia utama untuk daging, susu, bibit, dan tenaga kerja. Di Indonesia, sapi Bali, Madura, PO, Simental, Limosin, dan FH sering dipelihara sesuai tujuan pemeliharaan.",
         "perawatan": "Perawatan sapi mencakup pakan hijauan dan konsentrat yang seimbang, air minum bersih, kandang kering dengan ventilasi baik, sanitasi rutin, recording bobot, program vaksinasi, dan pemeriksaan kesehatan berkala.",
         "pakan": "Pakan sapi umumnya terdiri dari hijauan, leguminosa, jerami terolah, konsentrat, mineral, dan air. Kebutuhan bahan kering dipengaruhi bobot badan, umur, fase produksi, dan target pertambahan bobot.",
         "reproduksi": "Masa kebuntingan sapi sekitar 9 bulan. Manajemen reproduksi perlu mencakup deteksi birahi, pencatatan kawin/IB, pemeriksaan kebuntingan, dan evaluasi calving interval.",

@@ -22,15 +22,61 @@ ANIMAL_PHASES: Dict[str, List[str]] = {
     "ikan mas": ["benih", "pendederan", "pembesaran", "pra-panen", "indukan"],
 }
 
-PRODUCTION_GOALS: List[str] = [
-    "pedaging", "petelur", "pembibitan", "susu", "penggemukan", "pembesaran ikan", "perah", "breeding", "hasil olahan", "pupuk/limbah", "campuran"
+# Tujuan pemeliharaan utama dibuat eksplisit agar AI tidak hanya membaca komoditas,
+# tetapi juga orientasi produksi: pedaging, petelur, perah, atau dwiguna.
+MAINTENANCE_GOALS: List[str] = ["pedaging", "petelur", "perah", "dwiguna"]
+
+GOAL_DETAILS: Dict[str, Dict[str, str]] = {
+    "pedaging": {
+        "label": "Pedaging",
+        "focus": "pertumbuhan, ADG, FCR, umur/bobot panen, kualitas karkas, dan efisiensi biaya pakan",
+        "note": "Cocok untuk sapi potong, kambing/domba penggemukan, broiler, bebek pedaging, kelinci pedaging, babi finisher, dan ikan konsumsi.",
+    },
+    "petelur": {
+        "label": "Petelur",
+        "focus": "produksi telur, kualitas kerabang, persistensi produksi, konsumsi pakan, cahaya, kalsium, dan mortalitas",
+        "note": "Cocok untuk ayam layer, ayam kampung/KUB petelur, itik petelur, dan puyuh petelur.",
+    },
+    "perah": {
+        "label": "Perah",
+        "focus": "produksi susu, kualitas susu, manajemen laktasi, kebersihan ambing, BCS, air minum, dan kesehatan reproduksi",
+        "note": "Cocok untuk sapi perah, kambing perah, kerbau perah, atau komoditas lain yang diarahkan untuk susu.",
+    },
+    "dwiguna": {
+        "label": "Dwiguna",
+        "focus": "kombinasi dua tujuan produksi, misalnya daging-susu, daging-telur, daging-bibit, atau telur-bibit",
+        "note": "Cocok untuk sistem rakyat yang mengejar lebih dari satu hasil, tetapi perlu prioritas agar manajemen pakan dan recording tidak rancu.",
+    },
+}
+
+# Opsi lanjutan tetap dipertahankan untuk kebutuhan konsultasi khusus, tetapi empat
+# tujuan utama selalu diletakkan di depan sesuai kebutuhan peternak.
+PRODUCTION_GOALS: List[str] = MAINTENANCE_GOALS + [
+    "pembibitan", "penggemukan", "pembesaran ikan", "breeding", "hasil olahan", "pupuk/limbah", "campuran"
 ]
+
+GOALS_BY_ANIMAL: Dict[str, List[str]] = {
+    "sapi": ["pedaging", "perah", "dwiguna", "pembibitan", "penggemukan"],
+    "kerbau": ["pedaging", "perah", "dwiguna", "pembibitan"],
+    "kambing": ["pedaging", "perah", "dwiguna", "pembibitan", "penggemukan"],
+    "domba": ["pedaging", "dwiguna", "pembibitan", "penggemukan"],
+    "ayam": ["pedaging", "petelur", "dwiguna", "pembibitan"],
+    "bebek": ["pedaging", "petelur", "dwiguna", "pembibitan"],
+    "puyuh": ["petelur", "pedaging", "dwiguna", "pembibitan"],
+    "kelinci": ["pedaging", "dwiguna", "pembibitan"],
+    "babi": ["pedaging", "pembibitan"],
+    "ikan lele": ["pedaging", "pembesaran ikan", "pembibitan"],
+    "ikan nila": ["pedaging", "pembesaran ikan", "pembibitan"],
+    "ikan gurame": ["pedaging", "pembesaran ikan", "pembibitan"],
+    "ikan patin": ["pedaging", "pembesaran ikan", "pembibitan"],
+    "ikan mas": ["pedaging", "pembesaran ikan", "pembibitan"],
+}
 
 DEFAULT_PROFILE: Dict[str, Any] = {
     "farm_name": "",
     "animal_type": "kambing",
     "breed": "Peranakan Etawa/PE",
-    "production_goal": "penggemukan",
+    "production_goal": "pedaging",
     "phase": "penggemukan",
     "population": 10,
     "average_age": "",
@@ -44,6 +90,53 @@ DEFAULT_PROFILE: Dict[str, Any] = {
     "market_target": "",
 }
 
+
+
+def goal_options(animal_type: str) -> List[str]:
+    """Return purpose options with the four main goals first and animal-relevant goals nearby."""
+    animal = str(animal_type or "").lower().strip()
+    options = list(GOALS_BY_ANIMAL.get(animal, MAINTENANCE_GOALS))
+    for goal in MAINTENANCE_GOALS:
+        if goal not in options:
+            options.append(goal)
+    for goal in PRODUCTION_GOALS:
+        if goal not in options:
+            options.append(goal)
+    return options
+
+
+def goal_label(goal: str) -> str:
+    key = str(goal or "").lower().strip()
+    if key in GOAL_DETAILS:
+        return GOAL_DETAILS[key]["label"]
+    return str(goal or "-").replace("_", " ").title()
+
+
+def goal_detail(goal: str) -> Dict[str, str]:
+    key = str(goal or "").lower().strip()
+    if key in GOAL_DETAILS:
+        return GOAL_DETAILS[key]
+    return {
+        "label": goal_label(key),
+        "focus": "tujuan khusus yang perlu diterjemahkan ke target produksi, pakan, recording, dan pasar",
+        "note": "Pastikan tujuan pemeliharaan jelas agar rekomendasi AI tidak rancu.",
+    }
+
+
+def goal_context(goal: str, animal_type: str = "") -> str:
+    detail = goal_detail(goal)
+    animal = commodity_label(animal_type) if animal_type else "komoditas terpilih"
+    return (
+        f"Tujuan pemeliharaan: {detail['label']} pada {animal}. "
+        f"Fokus keputusan: {detail['focus']}. Catatan: {detail['note']}"
+    )
+
+
+def maintenance_goal_rows() -> List[Dict[str, str]]:
+    return [
+        {"Tujuan Pemeliharaan": detail["label"], "Key": key, "Fokus Manajemen": detail["focus"], "Catatan": detail["note"]}
+        for key, detail in GOAL_DETAILS.items()
+    ]
 
 def normalise_profile(profile: Dict[str, Any] | None) -> Dict[str, Any]:
     result = dict(DEFAULT_PROFILE)
@@ -80,7 +173,8 @@ def summarize_profile(profile: Dict[str, Any], compact: bool = False) -> str:
     p = normalise_profile(profile)
     if compact:
         return (
-            f"Profil farm: {p['population']} ekor {commodity_label(p['animal_type'])} bangsa/strain {p.get('breed', '-') or '-'} fase {p['phase']} untuk {p['production_goal']}; "
+            f"Profil farm: {p['population']} ekor {commodity_label(p['animal_type'])} bangsa/strain {p.get('breed', '-') or '-'} "
+            f"tujuan pemeliharaan {goal_label(p['production_goal'])} fase {p['phase']}; "
             f"bobot rata-rata {p['average_weight_kg']:.2f} kg; kandang {p['housing_system']}; "
             f"pakan tersedia: {p['feed_available']}; masalah utama: {p['main_problem'] or 'belum diisi'}."
         )
@@ -89,7 +183,7 @@ def summarize_profile(profile: Dict[str, Any], compact: bool = False) -> str:
         f"- Nama farm: {p['farm_name'] or '-'}",
         f"- Komoditas: {commodity_label(p['animal_type'])}",
         f"- Bangsa/ras/strain: {p.get('breed', '-') or '-'}",
-        f"- Tujuan usaha: {p['production_goal']}",
+        f"- Tujuan pemeliharaan: {goal_label(p['production_goal'])}",
         f"- Fase ternak: {p['phase']}",
         f"- Populasi: {p['population']} ekor",
         f"- Umur rata-rata: {p['average_age'] or '-'}",

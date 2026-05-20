@@ -92,7 +92,7 @@ for _dept in UGM_DEPARTMENTS:
 
 EDUCATION_MODULES: Dict[str, List[Dict[str, str]]] = {
     "Dasar Beternak": [
-        {"judul": "Mulai dari tujuan usaha", "materi": "Tentukan dulu apakah usaha untuk pedaging, petelur, pembibitan, susu, atau pembesaran. Tujuan menentukan bibit, pakan, kandang, dan jadwal panen.", "kuis": "Apa tujuan utama usaha ternak Anda?"},
+        {"judul": "Mulai dari tujuan pemeliharaan", "materi": "Tentukan dulu apakah pemeliharaan diarahkan untuk pedaging, petelur, perah, atau dwiguna. Tujuan pemeliharaan menentukan bangsa/strain, pakan, kandang, recording, teknologi hasil, dan jadwal panen/produksi.", "kuis": "Apa tujuan pemeliharaan utama ternak Anda?"},
         {"judul": "Catat data sederhana", "materi": "Minimal catat tanggal, populasi, pakan, bobot, mati/sakit, biaya, dan penjualan. Tanpa catatan, keuntungan sulit dihitung.", "kuis": "Sebutkan tiga data yang wajib dicatat setiap minggu."},
     ],
     "Pakan dan Nutrisi": [

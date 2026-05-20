@@ -27,6 +27,11 @@ Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 - Contoh bangsa/strain: Sapi Bali, Madura, PO, Brahman Cross, Simmental, Limousin, FH; Kambing Kacang, PE, Boer, Saanen, Sapera; Domba Garut, Ekor Tipis, Dorper; Broiler, Layer, KUB, Joper; Itik Mojosari, Alabio, Peking; Lele Sangkuriang, Nila Nirwana, Gurame Soang, Patin Siam, dan lainnya.
 - Informasi bangsa/strain ikut dikirim ke AI, ditulis ke XLSX, dan muncul dalam laporan PDF.
 
+### Tujuan Pemeliharaan
+- Profil farm sekarang menyimpan **tujuan pemeliharaan**: **pedaging**, **petelur**, **perah**, dan **dwiguna**.
+- Tujuan ini dipakai AI untuk menyesuaikan rekomendasi pakan, fase produksi, recording, teknologi hasil, target panen/produksi, dan analisis usaha.
+- Backup XLSX memiliki sheet **Tujuan_Pemeliharaan** agar peternak dapat membaca definisi/fokus tiap tujuan tanpa membuka aplikasi.
+
 ### Kerangka Hulu-Hilir 5 Departemen
 - Sistem sekarang memakai kerangka 5 departemen Fakultas Peternakan UGM sebagai peta keilmuan:
   - Nutrisi dan Makanan Ternak
@@ -61,6 +66,7 @@ Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 - Sheet yang tersedia antara lain:
   - Ringkasan
   - Profil
+  - Tujuan_Pemeliharaan
   - Komoditas_Bangsa
   - Catatan_Performa
   - Kalender

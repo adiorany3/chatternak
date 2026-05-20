@@ -30,6 +30,9 @@ from farm_profile import (
     DEFAULT_PROFILE,
     PRODUCTION_GOALS,
     breeding_dates,
+    goal_context,
+    goal_label,
+    goal_options,
     normalise_profile,
     phase_guidance,
     profile_completeness,
@@ -1069,7 +1072,17 @@ def render_profile() -> None:
                 breed_list = [current_breed] + breed_list
             breed = st.selectbox("Bangsa / ras / strain", breed_list, index=breed_list.index(current_breed) if current_breed in breed_list else 0)
             st.caption(breed_detail(animal, breed).get("note", ""))
-            goal = st.selectbox("Tujuan usaha", PRODUCTION_GOALS, index=PRODUCTION_GOALS.index(p["production_goal"]) if p["production_goal"] in PRODUCTION_GOALS else 0)
+            goal_list = goal_options(animal)
+            current_goal = p.get("production_goal", "pedaging")
+            if current_goal not in goal_list:
+                goal_list = [current_goal] + goal_list
+            goal = st.selectbox(
+                "Tujuan pemeliharaan",
+                goal_list,
+                index=goal_list.index(current_goal) if current_goal in goal_list else 0,
+                format_func=goal_label,
+            )
+            st.caption(goal_context(goal, animal))
             phases = ANIMAL_PHASES.get(animal, [p.get("phase", "umum")])
             current_phase = p.get("phase", phases[0])
             if current_phase not in phases:
@@ -1737,7 +1750,7 @@ Tanggal: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
 ## Profil Farm
 - Nama: {profile.get('farm_name') or '-'}
-- Komoditas: {commodity_label(profile.get('animal_type'))} | Bangsa/strain: {profile.get('breed', '-')} | Tujuan: {profile.get('production_goal')} | Fase: {profile.get('phase')}
+- Komoditas: {commodity_label(profile.get('animal_type'))} | Bangsa/strain: {profile.get('breed', '-')} | Tujuan pemeliharaan: {goal_label(profile.get('production_goal'))} | Fase: {profile.get('phase')}
 - Populasi: {profile.get('population')} ekor | Bobot rata-rata: {profile.get('average_weight_kg')} kg
 - Lokasi: {profile.get('location') or '-'}
 - Masalah utama: {profile.get('main_problem') or '-'}

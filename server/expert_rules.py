@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Tuple
 from farm_profile import normalise_profile, profile_completeness
 from farm_records import summarize_records
 from health_triage import triage_level
+from commodity_breeds import AQUACULTURE, POULTRY, RUMINANTS, commodity_context as commodity_breed_context
 
 EXPERT_RESPONSE_FORMAT = """
 Format wajib jawaban AI Pakar Ternak:
@@ -79,6 +80,38 @@ COMMODITY_TEMPLATES: Dict[str, Dict[str, Any]] = {
         "daily_check": ["pakan", "air", "feses", "suhu kandang", "anak kelinci", "kebersihan"],
     },
 }
+
+COMMODITY_TEMPLATES.update({
+    "kerbau": {
+        "kpi": ["ADG", "BCS", "konsumsi bahan kering", "produksi susu", "service per conception", "calving interval"],
+        "critical_questions": ["bangsa/tipe kerbau", "tujuan daging/susu/kerja", "akses air/kubangan", "pakan hijauan", "status reproduksi"],
+        "red_flags": ["tidak mau makan >24 jam", "demam tinggi", "ambruk", "diare berdarah", "sesak", "mortalitas mendadak"],
+        "daily_check": ["nafsu makan", "ruminasi", "feses", "air", "kulit", "kondisi kandang/kubangan"],
+    },
+    "domba": {
+        "kpi": ["ADG", "FCR kasar", "BCS", "mortalitas anak", "jumlah anak lahir/sapih"],
+        "critical_questions": ["bangsa domba", "bobot", "fase", "pakan hijauan", "riwayat cacing", "kondisi kuku"],
+        "red_flags": ["kembung", "tidak mau makan", "mencret parah", "pincang berat", "banyak sakit bersamaan"],
+        "daily_check": ["nafsu makan", "feses", "perut kiri", "kuku", "lantai kandang", "air minum"],
+    },
+    "puyuh": {
+        "kpi": ["produksi telur", "FCR", "mortalitas", "uniformity", "konsumsi pakan"],
+        "critical_questions": ["umur", "strain", "populasi", "produksi telur", "pakan", "cahaya", "ventilasi"],
+        "red_flags": ["kematian mendadak", "produksi telur turun drastis", "ngorok massal", "diare", "kanibalisme"],
+        "daily_check": ["telur", "pakan", "air", "kotoran", "suhu", "mortalitas"],
+    },
+    "babi": {
+        "kpi": ["ADG", "FCR", "mortalitas", "jumlah anak lahir hidup", "umur sapih", "feed cost/kg gain"],
+        "critical_questions": ["bangsa", "fase", "bobot", "pakan", "kepadatan", "sanitasi", "riwayat penyakit"],
+        "red_flags": ["demam tinggi", "diare parah", "mortalitas mendadak", "tidak mau makan", "banyak sakit bersamaan"],
+        "daily_check": ["pakan", "air", "feses", "suhu kandang", "batuk", "kulit", "kebersihan"],
+    },
+    "ikan lele": COMMODITY_TEMPLATES["ikan"],
+    "ikan nila": COMMODITY_TEMPLATES["ikan"],
+    "ikan gurame": COMMODITY_TEMPLATES["ikan"],
+    "ikan patin": COMMODITY_TEMPLATES["ikan"],
+    "ikan mas": COMMODITY_TEMPLATES["ikan"],
+})
 
 HEALTH_KEYWORDS = {
     "sakit", "penyakit", "gejala", "mencret", "diare", "batuk", "ngorok", "lumpuh", "pincang", "kembung",
@@ -195,11 +228,11 @@ def farm_risk_score(
         score += min(22, 8 + int(summary.get("mortality_total", 0)) * 2)
         dimensions["Kesehatan"] = "Kuning"
         reasons.append("Ada mortalitas pada catatan performa; perlu evaluasi kesehatan dan biosecurity.")
-    if summary.get("fcr") is not None and float(summary["fcr"]) > 4 and p.get("animal_type") in {"ayam", "bebek", "ikan"}:
+    if summary.get("fcr") is not None and float(summary["fcr"]) > 4 and p.get("animal_type") in POULTRY or p.get("animal_type") in AQUACULTURE:
         score += 18
         dimensions["Pakan"] = "Kuning"
         reasons.append("FCR terlihat tinggi untuk unggas/ikan; cek kualitas pakan, kesehatan, kepadatan, dan recording pakan.")
-    if p.get("animal_type") in {"sapi", "kambing", "kelinci"} and summary.get("adg") is not None and float(summary["adg"]) <= 0:
+    if p.get("animal_type") in RUMINANTS or p.get("animal_type") in {"kelinci", "babi"} and summary.get("adg") is not None and float(summary["adg"]) <= 0:
         score += 20
         dimensions["Pakan"] = "Kuning"
         reasons.append("ADG tidak naik; evaluasi pakan, kesehatan, parasit, dan akurasi bobot.")
@@ -256,6 +289,7 @@ def build_expert_context(
     parts = [
         "Konteks ahli tambahan:",
         EXPERT_RESPONSE_FORMAT,
+        commodity_breed_context(profile.get("animal_type", ""), profile.get("breed", "")),
         commodity_context(profile),
         glossary_context_for_text(user_message),
         "Skor risiko lokal: " + str(risk),

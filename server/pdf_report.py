@@ -6,6 +6,7 @@ from io import BytesIO
 from typing import Any, Dict, Iterable, List, Tuple
 from xml.sax.saxutils import escape
 from ugm_departments import UGM_DEPARTMENTS, HULU_HILIR_FLOW, department_coverage_check
+from commodity_breeds import breed_detail, commodity_context as commodity_breed_context, commodity_label
 
 APP_NAME = "AI Pakar Ternak"
 DEVELOPER = "Developed by Galuh Adi Insani (Fakultas Peternakan UGM)"
@@ -60,7 +61,8 @@ def _first_items(items: Iterable[Any], limit: int = 6) -> List[str]:
 def _profile_rows(profile: Dict[str, Any]) -> List[Tuple[str, str]]:
     labels = {
         "farm_name": "Nama Farm / Kelompok",
-        "animal_type": "Jenis Ternak",
+        "animal_type": "Komoditas Ternak",
+        "breed": "Bangsa / Ras / Strain",
         "production_goal": "Tujuan Usaha",
         "phase": "Fase Ternak",
         "population": "Populasi",
@@ -74,7 +76,13 @@ def _profile_rows(profile: Dict[str, Any]) -> List[Tuple[str, str]]:
         "budget_note": "Catatan Modal / Biaya",
         "market_target": "Target Pasar",
     }
-    return [(label, _text(profile.get(key))) for key, label in labels.items()]
+    rows: List[Tuple[str, str]] = []
+    for key, label in labels.items():
+        value = profile.get(key)
+        if key == "animal_type":
+            value = commodity_label(value)
+        rows.append((label, _text(value)))
+    return rows
 
 
 def _records_summary(records: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -264,7 +272,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     ))
     cover_rows = [
         ["Nama Farm", _make_paragraph(farm_name, styles["Body"])],
-        ["Komoditas", _make_paragraph(f"{_text(profile.get('animal_type'))} - {_text(profile.get('production_goal'))}", styles["Body"])],
+        ["Komoditas", _make_paragraph(f"{commodity_label(profile.get('animal_type'))} - {_text(profile.get('breed'))} - {_text(profile.get('production_goal'))}", styles["Body"])],
         ["Populasi", _make_paragraph(f"{_text(profile.get('population'))} ekor", styles["Body"])],
         ["Tanggal Laporan", _make_paragraph(generated_at, styles["Body"])],
         ["Mode Pengguna", _make_paragraph(f"{user_mode} / {explanation_level}", styles["Body"])],
@@ -280,7 +288,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     risk_level = risk.get("level", "-")
     risk_score = risk.get("score", "-")
     summary_text = (
-        f"Farm {farm_name} memiliki komoditas {_text(profile.get('animal_type'))} fase {_text(profile.get('phase'))}. "
+        f"Farm {farm_name} memiliki komoditas {commodity_label(profile.get('animal_type'))} bangsa/strain {_text(profile.get('breed'))} fase {_text(profile.get('phase'))}. "
         f"Skor kesiapan saat ini {_text(score)}/100 dengan level {_text(ready_level)}. "
         f"Skor risiko farm {_text(risk_score)}/100 dengan status {_text(risk_level)}. "
         "Rekomendasi pada laporan ini perlu dibaca sebagai dasar pengambilan keputusan manajemen, bukan pengganti pemeriksaan dokter hewan pada kasus kesehatan serius."
@@ -307,6 +315,9 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     story.append(_make_paragraph("2. Profil Farm", styles["SectionTitle"]))
     profile_table = [["Kolom", "Isi"]] + [[label, _make_paragraph(value, styles["Body"])] for label, value in _profile_rows(profile)]
     story.append(_make_table(profile_table, [5.0 * cm, 11.0 * cm]))
+    story.append(Spacer(1, 0.18 * cm))
+    story.append(_make_paragraph("Konteks Komoditas dan Bangsa/Ras/Strain", styles["SectionTitle"]))
+    story.append(_make_paragraph(commodity_breed_context(profile.get("animal_type", ""), profile.get("breed", "")), styles["Body"]))
 
 
     story.append(_make_paragraph("3. Kerangka 5 Departemen Hulu-Hilir", styles["SectionTitle"]))

@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any, Dict, List
 
+from commodity_breeds import AQUACULTURE, POULTRY, RUMINANTS
+
 
 def generate_management_events(animal_type: str, start: date, days: int = 60, phase: str = "") -> List[Dict[str, Any]]:
     animal = animal_type.lower()
@@ -19,13 +21,13 @@ def generate_management_events(animal_type: str, start: date, days: int = 60, ph
     add_every("Evaluasi pakan dan air", 3, "Cek stok pakan, kualitas bahan, air minum, dan konsumsi aktual.")
     add_every("Recording performa", 7, "Catat bobot sampling, mortalitas, produksi, pakan, dan biaya.")
 
-    if animal in {"sapi", "kambing", "kelinci"}:
-        add_every("Kontrol kesehatan ruminansia/kelinci", 14, "Cek BCS, kuku, kulit, feses, nafsu makan, dan tanda parasit.")
+    if animal in RUMINANTS or animal in {"kelinci", "babi"}:
+        add_every("Kontrol kesehatan ternak", 14, "Cek BCS/bobot, kulit, feses, nafsu makan, tanda parasit/penyakit, dan kondisi kandang.")
         add_every("Evaluasi reproduksi", 30, "Cek birahi, kebuntingan, induk laktasi, dan catatan kawin/IB.")
-    elif animal in {"ayam", "bebek"}:
+    elif animal in POULTRY:
         add_every("Cek biosecurity unggas", 7, "Cek footbath, litter, ventilasi, kepadatan, dan gejala pernapasan.")
         add_every("Evaluasi produksi telur/bobot", 7, "Catat produksi telur, berat badan sampling, FCR, dan mortalitas.")
-    elif animal == "ikan":
+    elif animal in AQUACULTURE:
         add_every("Cek kualitas air", 2, "Amati warna/bau air, ikan megap-megap, sisa pakan, dan aerasi.")
         add_every("Sampling bobot ikan", 10, "Sampling bobot untuk evaluasi pakan, FCR, dan waktu panen.")
 

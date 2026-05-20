@@ -2,24 +2,40 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-ANIMAL_TYPES: List[str] = ["sapi", "kambing", "ayam", "bebek", "ikan", "kelinci"]
+from commodity_breeds import ANIMAL_TYPES
 
 FEED_RATES: Dict[str, float] = {
     "sapi": 0.03,
+    "kerbau": 0.025,
     "kambing": 0.04,
+    "domba": 0.04,
     "ayam": 0.10,
     "bebek": 0.08,
-    "ikan": 0.05,
+    "puyuh": 0.08,
     "kelinci": 0.07,
+    "babi": 0.04,
+    "ikan lele": 0.05,
+    "ikan nila": 0.05,
+    "ikan gurame": 0.04,
+    "ikan patin": 0.05,
+    "ikan mas": 0.05,
 }
 
 DEFAULT_WEIGHTS: Dict[str, float] = {
     "sapi": 400.0,
+    "kerbau": 450.0,
     "kambing": 40.0,
+    "domba": 35.0,
     "ayam": 2.0,
     "bebek": 3.0,
-    "ikan": 0.5,
+    "puyuh": 0.15,
     "kelinci": 4.0,
+    "babi": 60.0,
+    "ikan lele": 0.15,
+    "ikan nila": 0.25,
+    "ikan gurame": 0.50,
+    "ikan patin": 0.35,
+    "ikan mas": 0.25,
 }
 
 FARMING_KNOWLEDGE: Dict[str, Dict[str, str]] = {
@@ -79,6 +95,47 @@ FARMING_KNOWLEDGE: Dict[str, Dict[str, str]] = {
     },
 }
 
+FARMING_KNOWLEDGE.update({
+    "kerbau": {
+        "info": "Kerbau adalah ruminansia besar untuk daging, susu, tenaga kerja, dan pupuk. Bangsa umum: kerbau lumpur, Murrah, Nili-Ravi, Surti, Jafarabadi, dan lokal.",
+        "perawatan": "Kerbau membutuhkan pakan serat cukup, air bersih, tempat teduh/berendam sesuai kondisi, sanitasi, recording reproduksi, dan kontrol parasit.",
+        "pakan": "Pakan kerbau berupa hijauan, jerami terolah, leguminosa, konsentrat, mineral, dan air. Kebutuhan dipengaruhi bobot, kerja, laktasi, dan tujuan daging/susu.",
+        "reproduksi": "Masa kebuntingan kerbau sekitar 10 bulan. Deteksi birahi bisa lebih sulit sehingga recording dan pengamatan rutin penting.",
+        "jenis": "Bangsa/tipe kerbau: kerbau lumpur, Murrah, Nili-Ravi, Surti, Jafarabadi, Pampangan, Toraya, dan lokal/campuran.",
+        "penyakit": "Masalah umum meliputi parasit, gangguan pencernaan, penyakit kulit, gangguan reproduksi, dan infeksi. Kasus berat perlu dokter hewan.",
+    },
+    "domba": {
+        "info": "Domba adalah ruminansia kecil untuk daging, bibit, dan pupuk. Bangsa umum: Garut, Ekor Tipis, Ekor Gemuk, Dorper, Merino, Suffolk, Texel, dan lokal.",
+        "perawatan": "Domba membutuhkan kandang kering, pakan hijauan-leguminosa, air bersih, mineral, kontrol cacing, pemotongan kuku, dan recording bobot.",
+        "pakan": "Pakan domba mirip kambing tetapi pemilihan hijauan dan adaptasi konsentrat perlu bertahap untuk mencegah gangguan rumen.",
+        "reproduksi": "Masa kebuntingan domba sekitar 5 bulan. Evaluasi BCS, riwayat kawin, kelahiran, dan jumlah anak sapih penting untuk seleksi induk.",
+        "jenis": "Bangsa/tipe domba: Garut, Ekor Tipis, Ekor Gemuk, Dorper, Merino, Suffolk, Texel, dan campuran/lokal.",
+        "penyakit": "Masalah umum meliputi cacingan, scabies, foot rot, diare, kembung, dan pneumonia. Pisahkan ternak sakit dan perkuat sanitasi.",
+    },
+    "puyuh": {
+        "info": "Puyuh adalah unggas kecil yang umum dipelihara untuk telur dan daging afkir. Strain umum: Coturnix japonica, lokal, Pharaoh, dan campuran.",
+        "perawatan": "Puyuh perlu kandang bersih, kepadatan wajar, ventilasi baik, cahaya stabil, air bersih, pakan protein cukup, dan biosecurity.",
+        "pakan": "Pakan puyuh petelur membutuhkan protein, energi, kalsium, vitamin, dan mineral yang stabil agar produksi telur tidak turun.",
+        "reproduksi": "Untuk pembibitan, perhatikan rasio jantan-betina, kualitas telur tetas, sanitasi, dan inkubasi.",
+        "jenis": "Strain/tipe puyuh: Coturnix japonica, lokal, Pharaoh, Golden Manchurian, dan campuran.",
+        "penyakit": "Masalah umum meliputi gangguan pernapasan, diare, stres panas, kanibalisme, dan penurunan produksi telur.",
+    },
+    "babi": {
+        "info": "Babi adalah ternak monogastrik untuk daging dan bibit. Bangsa umum: Landrace, Yorkshire/Large White, Duroc, Pietrain, Berkshire, Hampshire, dan lokal.",
+        "perawatan": "Babi membutuhkan kandang bersih-kering, ventilasi, pakan sesuai fase, air cukup, biosecurity, recording reproduksi, dan manajemen limbah.",
+        "pakan": "Pakan babi disusun menurut fase starter, grower, finisher, induk bunting, dan laktasi. Protein, energi, asam amino, mineral, dan kebersihan pakan penting.",
+        "reproduksi": "Manajemen reproduksi meliputi deteksi birahi, service, kebuntingan, farrowing, jumlah anak lahir hidup, dan sapih.",
+        "jenis": "Bangsa babi: Landrace, Yorkshire/Large White, Duroc, Pietrain, Berkshire, Hampshire, dan lokal/campuran.",
+        "penyakit": "Masalah umum meliputi diare, gangguan pernapasan, parasit, penyakit kulit, dan penyakit menular. Wabah/mortalitas tinggi harus segera dilaporkan ke petugas kesehatan hewan.",
+    },
+    "ikan lele": FARMING_KNOWLEDGE.get("ikan", {}),
+    "ikan nila": FARMING_KNOWLEDGE.get("ikan", {}),
+    "ikan gurame": FARMING_KNOWLEDGE.get("ikan", {}),
+    "ikan patin": FARMING_KNOWLEDGE.get("ikan", {}),
+    "ikan mas": FARMING_KNOWLEDGE.get("ikan", {}),
+})
+
+
 INTENTS = {
     "greeting": {
         "patterns": ["halo", "hai", "hello", "selamat pagi", "selamat siang", "selamat malam", "assalamualaikum"],
@@ -111,3 +168,12 @@ DOMAIN_TERMS = {
     "nutrisi", "makanan ternak", "sosial ekonomi", "agribisnis", "teknologi hasil", "hasil ternak",
     "pemuliaan", "genetik", "bibit", "karkas", "pascapanen", "mutu", "olahan",
 }
+
+
+DOMAIN_TERMS.update({
+    "kerbau", "domba", "puyuh", "babi", "itik", "lele", "nila", "gurame", "patin", "ikan mas",
+    "bali", "madura", "po", "ongole", "brahman", "simmental", "limousin", "fh", "friesian holstein",
+    "murrah", "kacang", "peranakan etawa", "pe", "boer", "saanen", "sapera", "garut", "dorper",
+    "broiler", "layer", "kub", "joper", "mojosari", "alabio", "peking", "coturnix", "landrace", "duroc",
+    "sangkuriang", "dumbo", "mutiara", "nirwana", "gesit", "majala", "majalaya", "strain", "bangsa", "ras"
+})

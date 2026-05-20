@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
+from commodity_breeds import AQUACULTURE, POULTRY, RUMINANTS
+
 from domain_data import FEED_RATES, DEFAULT_WEIGHTS
 from ugm_departments import UGM_DEPARTMENTS
 from farm_profile import profile_completeness, normalise_profile
@@ -23,6 +25,16 @@ LEVEL_GUIDANCE = {
     "Normal": "Berikan jawaban praktis dengan istilah teknis secukupnya.",
     "Teknis": "Berikan analisis lebih detail, asumsi, KPI, formula/perhitungan, dan implikasi manajemen.",
 }
+
+def audience_context(user_mode: str, explanation_level: str) -> str:
+    """Context string for AI answer style based on target user."""
+    user_mode = user_mode if user_mode in AUDIENCE_GUIDANCE else "Peternak Rakyat"
+    explanation_level = explanation_level if explanation_level in LEVEL_GUIDANCE else "Normal"
+    return (
+        "Konteks audiens:\n"
+        f"- Mode pengguna: {user_mode}. {AUDIENCE_GUIDANCE[user_mode]}\n"
+        f"- Kedalaman penjelasan: {explanation_level}. {LEVEL_GUIDANCE[explanation_level]}"
+    )
 
 LOCAL_LIBRARY: Dict[str, Dict[str, str]] = {
     "rumput odot": {
@@ -150,86 +162,93 @@ BIOSECURITY_ITEMS = [
     "Ada catatan sakit, mati, vaksin, dan perlakuan kesehatan",
 ]
 
-KPI_TARGETS: Dict[str, Dict[str, Tuple[float | None, float | None, str]]] = {
-    "sapi": {"adg": (0.4, None, "ADG sapi penggemukan sebaiknya positif dan stabil; target sangat tergantung genetik, pakan, dan fase."), "fcr": (None, 12.0, "FCR terlalu tinggi menandakan pakan boros/pertumbuhan lambat atau data belum rapi.")},
-    "kambing": {"adg": (0.05, None, "ADG kambing penggemukan rakyat minimal harus positif dan konsisten."), "fcr": (None, 14.0, "FCR kambing sulit akurat bila pakan hijauan tidak ditimbang; gunakan sebagai indikator kasar.")},
-    "ayam": {"fcr": (None, 2.5, "FCR unggas yang naik menandakan efisiensi turun, pakan/penyakit/suhu perlu dicek."), "mortality_rate": (None, 5.0, "Mortalitas tinggi perlu evaluasi kualitas bibit, brooding, pakan, air, dan biosecurity.")},
-    "bebek": {"fcr": (None, 3.5, "FCR bebek dipengaruhi sistem pemeliharaan, kualitas pakan, dan umur panen."), "mortality_rate": (None, 5.0, "Mortalitas tinggi butuh evaluasi air, litter, kepadatan, dan penyakit." )},
-    "ikan": {"fcr": (None, 2.0, "FCR ikan tinggi sering terkait kualitas air, pakan, kepadatan, atau penyakit."), "mortality_rate": (None, 10.0, "Mortalitas ikan tinggi harus cek oksigen, amonia, pH, dan kepadatan." )},
-    "kelinci": {"adg": (0.015, None, "ADG kelinci rendah bisa terkait pakan, kepadatan, stres, atau penyakit pencernaan."), "mortality_rate": (None, 5.0, "Mortalitas kelinci harus diawasi ketat karena penyakit pencernaan dapat cepat menyebar." )},
-}
-
-
-def audience_context(mode: str, level: str) -> str:
-    mode_text = AUDIENCE_GUIDANCE.get(mode, AUDIENCE_GUIDANCE["Peternak Rakyat"])
-    level_text = LEVEL_GUIDANCE.get(level, LEVEL_GUIDANCE["Normal"])
-    return f"Mode pengguna: {mode}. {mode_text}\nTingkat penjelasan: {level}. {level_text}"
-
-
 def guided_questions(topic: str, case: Dict[str, Any]) -> List[str]:
-    base = ["jenis_ternak", "jumlah_populasi", "umur_fase", "target_masalah"]
-    topic_fields = {
-        "Kesehatan": ["jumlah_terdampak", "gejala", "durasi", "kematian", "pakan_air", "kondisi_kandang"],
-        "Pakan": ["bobot_rata_rata", "bahan_pakan", "harga_bahan", "konsumsi_pakan", "tujuan_formula"],
+    """Return concise follow-up questions for incomplete guided consultation data."""
+    case = case or {}
+    base_required = ["jenis_ternak", "jumlah_populasi", "umur_fase", "target_masalah"]
+    topic_required = {
+        "Kesehatan": ["gejala", "durasi", "jumlah_sakit", "pakan_air", "kondisi_kandang"],
+        "Pakan": ["bahan_pakan", "jumlah_pakan", "harga_bahan", "target_masalah"],
         "Reproduksi": ["tanggal_kawin_ib", "riwayat_beranak", "tanda_birahi", "kondisi_induk"],
-        "Usaha/Biaya": ["modal", "biaya_pakan", "harga_jual", "target_panen", "tenaga_kerja"],
+        "Usaha/Biaya": ["modal", "biaya_pakan", "harga_jual", "target_panen"],
         "Kandang/Kolam": ["tipe_kandang", "ukuran", "kepadatan", "drainase_ventilasi", "masalah_lingkungan"],
         "Produksi": ["produksi_harian", "bobot_awal", "bobot_sekarang", "pakan_harian", "mortalitas"],
     }
     labels = {
-        "jenis_ternak": "Jenis ternak/budidaya apa?",
-        "jumlah_populasi": "Berapa jumlah populasi?",
-        "umur_fase": "Umur atau fase produksinya apa?",
-        "target_masalah": "Target atau masalah utama yang ingin diselesaikan?",
-        "jumlah_terdampak": "Berapa ekor/kolam yang terdampak?",
-        "gejala": "Gejala apa saja yang terlihat?",
-        "durasi": "Sudah berapa lama terjadi?",
-        "kematian": "Ada kematian? Berapa dan sejak kapan?",
-        "pakan_air": "Pakan dan air terakhir seperti apa? Ada perubahan?",
-        "kondisi_kandang": "Kondisi kandang/kolam: kering, lembap, bau amonia, air keruh, atau padat?",
-        "bobot_rata_rata": "Berapa bobot rata-rata?",
-        "bahan_pakan": "Bahan pakan lokal apa yang tersedia?",
-        "harga_bahan": "Berapa harga tiap bahan pakan?",
-        "konsumsi_pakan": "Berapa konsumsi pakan harian saat ini?",
-        "tujuan_formula": "Target formula: murah, cepat gemuk, produksi telur/susu, atau aman untuk bunting?",
+        "jenis_ternak": "Apa komoditas dan bangsa/strain ternaknya?",
+        "jumlah_populasi": "Berapa jumlah populasi/induk yang dikelola?",
+        "umur_fase": "Umur atau fase produksi ternak saat ini apa?",
+        "target_masalah": "Masalah utama atau target perbaikannya apa?",
+        "gejala": "Gejala utama yang tampak apa saja?",
+        "durasi": "Gejala sudah berlangsung berapa lama?",
+        "jumlah_sakit": "Berapa ekor yang sakit/terdampak?",
+        "pakan_air": "Pakan dan air terakhir seperti apa?",
+        "kondisi_kandang": "Kondisi kandang/kolam seperti apa?",
+        "bahan_pakan": "Bahan pakan yang tersedia apa saja?",
+        "jumlah_pakan": "Berapa jumlah pakan per hari?",
+        "harga_bahan": "Berapa harga bahan pakan utama?",
         "tanggal_kawin_ib": "Kapan tanggal kawin/IB terakhir?",
-        "riwayat_beranak": "Riwayat beranak/kebuntingan sebelumnya bagaimana?",
-        "tanda_birahi": "Ada tanda birahi atau tidak?",
-        "kondisi_induk": "Kondisi induk: skor tubuh, nafsu makan, kesehatan?",
-        "modal": "Berapa modal atau biaya berjalan yang tersedia?",
-        "biaya_pakan": "Berapa biaya pakan per hari/bulan?",
+        "riwayat_beranak": "Bagaimana riwayat beranak/kelahiran sebelumnya?",
+        "tanda_birahi": "Apakah ada tanda birahi dan kapan terlihat?",
+        "kondisi_induk": "Bagaimana kondisi tubuh induk?",
+        "modal": "Berapa modal atau biaya berjalan?",
+        "biaya_pakan": "Berapa biaya pakan harian/mingguan?",
         "harga_jual": "Berapa harga jual target?",
         "target_panen": "Kapan target panen atau penjualan?",
-        "tenaga_kerja": "Berapa tenaga kerja yang mengelola?",
-        "tipe_kandang": "Tipe kandang/kolam apa yang digunakan?",
-        "ukuran": "Ukuran kandang/kolam berapa?",
-        "kepadatan": "Kepadatan ternak/ikan seperti apa?",
-        "drainase_ventilasi": "Bagaimana drainase, ventilasi, dan aliran udara/air?",
+        "tipe_kandang": "Tipe kandang/kolam apa yang dipakai?",
+        "ukuran": "Berapa ukuran kandang/kolam?",
+        "kepadatan": "Berapa kepadatan ternak/ikan?",
+        "drainase_ventilasi": "Bagaimana drainase, ventilasi, atau aerasi?",
         "masalah_lingkungan": "Masalah lingkungan apa yang terlihat?",
-        "produksi_harian": "Produksi harian/mingguan berapa?",
-        "bobot_awal": "Bobot awal berapa?",
-        "bobot_sekarang": "Bobot sekarang berapa?",
-        "pakan_harian": "Pakan harian berapa kg?",
-        "mortalitas": "Mortalitas/sakit berapa?",
+        "produksi_harian": "Berapa produksi harian saat ini?",
+        "bobot_awal": "Berapa bobot awal?",
+        "bobot_sekarang": "Berapa bobot sekarang?",
+        "pakan_harian": "Berapa konsumsi pakan harian?",
+        "mortalitas": "Berapa mortalitas atau jumlah ternak sakit?",
     }
-    fields = base + topic_fields.get(topic, [])
-    missing = [labels[field] for field in fields if not str(case.get(field, "")).strip()]
-    return missing
+    required = list(dict.fromkeys(base_required + topic_required.get(topic, [])))
+    missing = []
+    for key in required:
+        value = str(case.get(key, "") or "").strip()
+        if not value:
+            missing.append(labels.get(key, f"Lengkapi data {key}."))
+    return missing[:8]
 
 
 def guided_case_context(topic: str, case: Dict[str, Any]) -> str:
-    lines = [f"Konsultasi bertahap topik: {topic}."]
+    """Build AI context for guided consultation."""
+    case = case or {}
+    lines = [
+        f"Topik konsultasi bertahap: {topic}",
+        "Data kasus:",
+    ]
     for key, value in case.items():
-        if str(value).strip():
+        if str(value or "").strip():
             lines.append(f"- {key}: {value}")
     missing = guided_questions(topic, case)
     if missing:
-        lines.append("Data yang belum lengkap: " + "; ".join(missing[:8]))
-    if topic == "Kesehatan":
-        combined = " ".join(str(case.get(k, "")) for k in ["gejala", "kematian", "target_masalah"])
-        level, flags = triage_level(combined)
-        lines.append(f"Triase lokal: {level}. Tanda bahaya: {', '.join(flags) if flags else 'tidak terdeteksi dari teks'}.")
+        lines.append("Data yang masih kurang:")
+        lines.extend(f"- {item}" for item in missing[:5])
+    lines.append("Instruksi: berikan rekomendasi praktis berbasis data yang ada, sebutkan asumsi, tindakan 24 jam, rencana 7 hari, risiko, dan data lanjutan yang perlu dicatat.")
     return "\n".join(lines)
+
+
+KPI_TARGETS: Dict[str, Dict[str, Tuple[float | None, float | None, str]]] = {
+    "sapi": {"adg": (0.4, None, "ADG sapi penggemukan sebaiknya positif dan stabil; target sangat tergantung genetik, pakan, dan fase."), "fcr": (None, 12.0, "FCR terlalu tinggi menandakan pakan boros/pertumbuhan lambat atau data belum rapi.")},
+    "kerbau": {"adg": (0.25, None, "ADG kerbau perlu dibaca sesuai tipe daging/susu/kerja dan kualitas pakan."), "fcr": (None, 14.0, "FCR kasar tinggi perlu evaluasi pakan hijauan, konsentrat, dan recording bobot.")},
+    "kambing": {"adg": (0.05, None, "ADG kambing penggemukan rakyat minimal harus positif dan konsisten."), "fcr": (None, 14.0, "FCR kambing sulit akurat bila pakan hijauan tidak ditimbang; gunakan sebagai indikator kasar.")},
+    "domba": {"adg": (0.06, None, "ADG domba perlu positif dan stabil; cek bangsa, pakan, parasit, dan kepadatan."), "fcr": (None, 14.0, "FCR kasar domba tinggi dapat menandakan pakan tidak efisien atau bobot tidak naik.")},
+    "ayam": {"fcr": (None, 2.5, "FCR unggas yang naik menandakan efisiensi turun, pakan/penyakit/suhu perlu dicek."), "mortality_rate": (None, 5.0, "Mortalitas tinggi perlu evaluasi kualitas bibit, brooding, pakan, air, dan biosecurity.")},
+    "bebek": {"fcr": (None, 3.5, "FCR bebek dipengaruhi sistem pemeliharaan, kualitas pakan, dan umur panen."), "mortality_rate": (None, 5.0, "Mortalitas tinggi butuh evaluasi air, litter, kepadatan, dan penyakit." )},
+    "puyuh": {"fcr": (None, 3.0, "FCR puyuh perlu dievaluasi bersama produksi telur dan konsumsi pakan."), "mortality_rate": (None, 5.0, "Mortalitas tinggi perlu evaluasi ventilasi, kepadatan, pakan, air, dan cahaya.")},
+    "kelinci": {"adg": (0.015, None, "ADG kelinci rendah bisa terkait pakan, kepadatan, stres, atau penyakit pencernaan."), "mortality_rate": (None, 5.0, "Mortalitas kelinci harus diawasi ketat karena penyakit pencernaan dapat cepat menyebar." )},
+    "babi": {"adg": (0.35, None, "ADG babi bergantung fase dan genetik; cek pakan, suhu, kepadatan, dan kesehatan."), "fcr": (None, 4.0, "FCR tinggi menandakan efisiensi pakan turun atau pertumbuhan lambat."), "mortality_rate": (None, 5.0, "Mortalitas tinggi perlu evaluasi penyakit dan biosecurity.")},
+    "ikan lele": {"fcr": (None, 1.6, "FCR lele tinggi sering terkait kualitas air, pakan, kepadatan, atau penyakit."), "mortality_rate": (None, 10.0, "Mortalitas ikan tinggi harus cek oksigen, amonia, pH, dan kepadatan." )},
+    "ikan nila": {"fcr": (None, 1.8, "FCR nila tinggi perlu evaluasi pakan, suhu, kepadatan, dan kualitas air."), "mortality_rate": (None, 10.0, "Mortalitas ikan tinggi harus cek oksigen, amonia, pH, dan kepadatan." )},
+    "ikan gurame": {"fcr": (None, 2.0, "FCR gurame perlu dibaca bersama lama pemeliharaan dan kualitas pakan."), "mortality_rate": (None, 10.0, "Mortalitas ikan tinggi harus cek oksigen, amonia, pH, dan kepadatan." )},
+    "ikan patin": {"fcr": (None, 1.8, "FCR patin tinggi sering terkait pakan, kualitas air, atau kepadatan."), "mortality_rate": (None, 10.0, "Mortalitas ikan tinggi harus cek oksigen, amonia, pH, dan kepadatan." )},
+    "ikan mas": {"fcr": (None, 2.0, "FCR ikan mas tinggi perlu evaluasi pakan, kualitas air, dan penyakit."), "mortality_rate": (None, 10.0, "Mortalitas ikan tinggi harus cek oksigen, amonia, pH, dan kepadatan." )},
+}
 
 
 def benchmark_kpi(profile: Dict[str, Any], records: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -306,7 +325,7 @@ def predict_operations(profile: Dict[str, Any], records: List[Dict[str, Any]], f
     stock_days = float(feed_stock_kg or 0) / daily_need if daily_need > 0 else 0
     adg = summary.get("adg")
     if not adg or adg <= 0:
-        adg = 0.05 if animal in {"kambing", "kelinci"} else 0.1 if animal in {"ayam", "bebek"} else 0.4 if animal == "sapi" else 0.01
+        adg = 0.05 if animal in {"kambing", "domba", "kelinci"} else 0.08 if animal in POULTRY else 0.3 if animal in {"sapi", "kerbau", "babi"} else 0.01
     days_to_harvest = max((float(target_weight_kg or avg_weight) - avg_weight) / adg, 0) if target_weight_kg else None
     harvest_date = (date.today() + timedelta(days=int(days_to_harvest))).isoformat() if days_to_harvest is not None else "Belum dihitung"
     feed_needed_to_harvest = daily_need * float(days_to_harvest or 0)

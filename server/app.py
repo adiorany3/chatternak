@@ -61,6 +61,17 @@ from openai_integration import DEFAULT_CONFIG, OpenAIChatAPI
 from session_storage import build_session_payload, export_session_xlsx, import_session_xlsx, session_filename
 from pdf_report import generate_pdf_report, pdf_report_filename
 from ui_theme import apply_accessible_theme
+from commodity_breeds import (
+    AQUACULTURE,
+    RUMINANTS,
+    POULTRY,
+    breed_detail,
+    breed_options,
+    catalog_markdown,
+    catalog_rows,
+    commodity_context as commodity_breed_context,
+    commodity_label,
+)
 from ugm_departments import (
     UGM_DEPARTMENTS,
     HULU_HILIR_FLOW,
@@ -738,6 +749,7 @@ def render_risk_score_panel() -> None:
 def render_expert_persona_reference() -> None:
     st.header("Persona & Aturan Pakar")
     st.caption("Bagian ini menjelaskan standar berpikir AI agar jawaban terasa seperti ahli peternakan, bukan chatbot umum.")
+    render_commodity_breed_catalog()
     st.subheader("Template komoditas")
     animal = st.selectbox("Pilih komoditas", list(COMMODITY_TEMPLATES.keys()))
     template = COMMODITY_TEMPLATES[animal]
@@ -802,6 +814,25 @@ def render_department_framework() -> None:
     st.markdown("**Alur hulu–hilir:**")
     st.markdown(hulu_hilir_markdown())
 
+
+
+
+def render_commodity_breed_catalog() -> None:
+    st.subheader("Komoditas Ternak & Bangsa/Ras/Strain")
+    st.caption("Katalog ini membantu AI membedakan rekomendasi untuk ternak potong, perah, petelur, pembibitan, dan akuakultur.")
+    selected = st.selectbox("Pilih komoditas", ANIMAL_TYPES, format_func=commodity_label, key="catalog_commodity_select")
+    selected_breed = st.selectbox("Pilih bangsa/ras/strain", breed_options(selected), key="catalog_breed_select")
+    detail = breed_detail(selected, selected_breed)
+    st.info(commodity_breed_context(selected, selected_breed))
+    c1, c2 = st.columns(2)
+    c1.metric("Kelompok", selected.replace("ikan ", "Akuakultur ").title())
+    c2.metric("Fokus", detail.get("focus", "-"))
+    st.markdown("**Catatan manajemen:**")
+    st.write(detail.get("note", "-"))
+    with st.expander("Lihat seluruh katalog dalam tabel", expanded=False):
+        st.dataframe(catalog_rows(), width="stretch", hide_index=True)
+    with st.expander("Lihat katalog ringkas", expanded=False):
+        st.markdown(catalog_markdown())
 
 def render_department_coverage_panel() -> None:
     profile = normalise_profile(st.session_state.farm_profile)
@@ -1026,7 +1057,18 @@ def render_profile() -> None:
         col1, col2 = st.columns(2)
         with col1:
             farm_name = st.text_input("Nama farm / kelompok", value=p.get("farm_name", ""))
-            animal = st.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0)
+            animal = st.selectbox(
+                "Komoditas ternak",
+                ANIMAL_TYPES,
+                index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0,
+                format_func=commodity_label,
+            )
+            breed_list = breed_options(animal)
+            current_breed = p.get("breed", "") or (breed_list[0] if breed_list else "")
+            if current_breed not in breed_list:
+                breed_list = [current_breed] + breed_list
+            breed = st.selectbox("Bangsa / ras / strain", breed_list, index=breed_list.index(current_breed) if current_breed in breed_list else 0)
+            st.caption(breed_detail(animal, breed).get("note", ""))
             goal = st.selectbox("Tujuan usaha", PRODUCTION_GOALS, index=PRODUCTION_GOALS.index(p["production_goal"]) if p["production_goal"] in PRODUCTION_GOALS else 0)
             phases = ANIMAL_PHASES.get(animal, [p.get("phase", "umum")])
             current_phase = p.get("phase", phases[0])
@@ -1050,6 +1092,7 @@ def render_profile() -> None:
             st.session_state.farm_profile = normalise_profile({
                 "farm_name": farm_name,
                 "animal_type": animal,
+                "breed": breed,
                 "production_goal": goal,
                 "phase": phase,
                 "population": population,
@@ -1113,7 +1156,12 @@ def render_health_consultation(selected_model_id: str, selected_fallback_models:
     with st.form("health_form"):
         col1, col2 = st.columns(2)
         with col1:
-            animal = st.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="health_animal")
+            animal = st.selectbox("Komoditas ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="health_animal", format_func=commodity_label)
+            health_breeds = breed_options(animal)
+            current_health_breed = p.get("breed", "") if p.get("animal_type") == animal else (health_breeds[0] if health_breeds else "")
+            if current_health_breed and current_health_breed not in health_breeds:
+                health_breeds = [current_health_breed] + health_breeds
+            breed = st.selectbox("Bangsa / ras / strain", health_breeds, index=health_breeds.index(current_health_breed) if current_health_breed in health_breeds else 0, key="health_breed")
             population = st.number_input("Populasi total", min_value=1, value=max(int(p.get("population", 1)), 1), step=1)
             affected = st.number_input("Jumlah yang sakit/terdampak", min_value=1, value=1, step=1)
             phase = st.text_input("Umur/fase", value=p.get("phase", ""))
@@ -1128,6 +1176,7 @@ def render_health_consultation(selected_model_id: str, selected_fallback_models:
     if submitted:
         case = {
             "animal_type": animal,
+            "breed": breed,
             "population": population,
             "affected": affected,
             "phase": phase,
@@ -1175,7 +1224,7 @@ def render_feed_formulation() -> None:
     p = normalise_profile(st.session_state.farm_profile)
 
     col1, col2, col3 = st.columns(3)
-    animal = col1.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="feed_animal")
+    animal = col1.selectbox("Komoditas ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="feed_animal", format_func=commodity_label)
     phases = ANIMAL_PHASES.get(animal, [p.get("phase", "umum")])
     phase = col2.selectbox("Fase", phases, index=phases.index(p["phase"]) if p["phase"] in phases else 0, key="feed_phase")
     population = col3.number_input("Populasi", min_value=1, value=max(int(p.get("population", 1)), 1), step=1, key="feed_pop")
@@ -1209,7 +1258,7 @@ def render_feed_formulation() -> None:
     if st.button("Evaluasi formula", width="stretch"):
         st.markdown(formula_feedback(animal, phase, ingredients))
 
-    if animal in {"sapi", "kambing"}:
+    if animal in RUMINANTS:
         st.subheader("Ransum awal ruminansia")
         c1, c2 = st.columns(2)
         body_weight = c1.number_input("Bobot rata-rata (kg)", min_value=1.0, value=max(float(p.get("average_weight_kg", 25.0)), 1.0), step=0.5)
@@ -1293,14 +1342,14 @@ def render_calendar() -> None:
     col1, col2, col3 = st.columns(3)
     start_date = col1.date_input("Mulai jadwal", value=date.today())
     days = col2.number_input("Periode jadwal (hari)", min_value=7, max_value=365, value=60, step=7)
-    animal = col3.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="calendar_animal")
+    animal = col3.selectbox("Komoditas ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="calendar_animal", format_func=commodity_label)
     phase = st.text_input("Fase ternak", value=p.get("phase", ""), key="calendar_phase")
 
     if st.button("Buat jadwal otomatis", width="stretch"):
         st.session_state.farm_calendar_events = generate_management_events(animal, start_date, int(days), phase)
         st.success("Kalender manajemen dibuat dan akan menjadi konteks AI.")
 
-    if animal in {"sapi", "kambing", "kelinci"}:
+    if animal in RUMINANTS or animal in {"kelinci", "babi"}:
         with st.expander("Prediksi kelahiran dari tanggal kawin/IB"):
             breeding_date = st.date_input("Tanggal kawin/IB", value=date.today(), key="breeding_date")
             dates = breeding_dates(animal, breeding_date)
@@ -1325,7 +1374,7 @@ def render_feed_calculator() -> None:
     p = normalise_profile(st.session_state.farm_profile)
     col1, col2 = st.columns(2)
     with col1:
-        animal_type = st.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="calc_animal")
+        animal_type = st.selectbox("Komoditas ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="calc_animal", format_func=commodity_label)
         count = st.number_input("Jumlah ternak (ekor)", min_value=1, value=max(int(p.get("population", 10)), 1), key="calc_count")
     with col2:
         weight = st.number_input("Berat rata-rata (kg)", min_value=0.1, value=float(p.get("average_weight_kg") or DEFAULT_WEIGHTS.get(animal_type, 1.0)), step=0.1, key="calc_weight")
@@ -1346,7 +1395,7 @@ def render_growth_prediction() -> None:
     p = normalise_profile(st.session_state.farm_profile)
     col1, col2 = st.columns(2)
     with col1:
-        animal_type = st.selectbox("Jenis ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="growth_animal")
+        animal_type = st.selectbox("Komoditas ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="growth_animal", format_func=commodity_label)
         initial_weight = st.number_input("Berat awal (kg)", min_value=0.1, value=max(float(p.get("average_weight_kg", 1.0)), 0.1), step=0.1)
     with col2:
         daily_gain = st.number_input("Pertambahan berat harian (kg/hari)", min_value=0.0, value=0.1, step=0.01)
@@ -1688,7 +1737,7 @@ Tanggal: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
 ## Profil Farm
 - Nama: {profile.get('farm_name') or '-'}
-- Komoditas: {profile.get('animal_type')} | Tujuan: {profile.get('production_goal')} | Fase: {profile.get('phase')}
+- Komoditas: {commodity_label(profile.get('animal_type'))} | Bangsa/strain: {profile.get('breed', '-')} | Tujuan: {profile.get('production_goal')} | Fase: {profile.get('phase')}
 - Populasi: {profile.get('population')} ekor | Bobot rata-rata: {profile.get('average_weight_kg')} kg
 - Lokasi: {profile.get('location') or '-'}
 - Masalah utama: {profile.get('main_problem') or '-'}
@@ -1858,9 +1907,11 @@ def render_tools_center() -> None:
 def render_learning_report_center() -> None:
     st.header("Edukasi & Laporan")
     st.caption("Bagian ini untuk membaca pengetahuan lokal, belajar bertahap, dan menyiapkan laporan yang dapat dibagikan.")
-    tab_library, tab_framework, tab_education, tab_report, tab_persona = st.tabs(["Library Lokal", "5 Departemen", "Edukasi", "Laporan", "Aturan Pakar"])
+    tab_library, tab_breeds, tab_framework, tab_education, tab_report, tab_persona = st.tabs(["Library Lokal", "Komoditas & Bangsa", "5 Departemen", "Edukasi", "Laporan", "Aturan Pakar"])
     with tab_library:
         render_local_library()
+    with tab_breeds:
+        render_commodity_breed_catalog()
     with tab_framework:
         render_department_framework()
         render_department_coverage_panel()
@@ -1908,7 +1959,7 @@ with st.sidebar:
 
     p = normalise_profile(st.session_state.farm_profile)
     completeness = profile_completeness(p)
-    st.caption(f"Profil: {p['population']} ekor {p['animal_type']} · {completeness}% lengkap")
+    st.caption(f"Profil: {p['population']} ekor {commodity_label(p['animal_type'])} · {p.get('breed', '-')} · {completeness}% lengkap")
     st.progress(completeness / 100)
 
     with st.expander("Preferensi Jawaban", expanded=False):

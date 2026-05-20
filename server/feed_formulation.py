@@ -20,15 +20,27 @@ LOCAL_FEED_INGREDIENTS: Dict[str, Dict[str, float | str]] = {
 TARGET_PROTEIN: Dict[Tuple[str, str], float] = {
     ("sapi", "penggemukan"): 12.0,
     ("sapi", "laktasi"): 14.0,
+    ("kerbau", "penggemukan"): 11.0,
+    ("kerbau", "laktasi"): 13.0,
     ("kambing", "penggemukan"): 13.0,
     ("kambing", "bunting tua"): 14.0,
     ("kambing", "laktasi"): 15.0,
+    ("domba", "penggemukan"): 13.0,
+    ("domba", "bunting tua"): 14.0,
     ("ayam", "starter"): 20.0,
     ("ayam", "grower"): 17.0,
     ("ayam", "finisher"): 18.0,
     ("ayam", "layer awal produksi"): 17.0,
     ("bebek", "petelur"): 17.0,
-    ("ikan", "pembesaran"): 28.0,
+    ("puyuh", "petelur"): 20.0,
+    ("babi", "starter"): 20.0,
+    ("babi", "grower"): 17.0,
+    ("babi", "finisher"): 15.0,
+    ("ikan lele", "pembesaran"): 30.0,
+    ("ikan nila", "pembesaran"): 28.0,
+    ("ikan gurame", "pembesaran"): 26.0,
+    ("ikan patin", "pembesaran"): 28.0,
+    ("ikan mas", "pembesaran"): 28.0,
     ("kelinci", "penggemukan"): 16.0,
 }
 
@@ -39,7 +51,7 @@ def target_protein(animal_type: str, phase: str) -> float:
     for (a, p), target in TARGET_PROTEIN.items():
         if a == animal and p in ph:
             return target
-    defaults = {"sapi": 12.0, "kambing": 13.0, "ayam": 18.0, "bebek": 17.0, "ikan": 28.0, "kelinci": 16.0}
+    defaults = {"sapi": 12.0, "kerbau": 11.0, "kambing": 13.0, "domba": 13.0, "ayam": 18.0, "bebek": 17.0, "puyuh": 20.0, "kelinci": 16.0, "babi": 17.0, "ikan lele": 30.0, "ikan nila": 28.0, "ikan gurame": 26.0, "ikan patin": 28.0, "ikan mas": 28.0}
     return defaults.get(animal, 14.0)
 
 
@@ -98,7 +110,8 @@ def formula_feedback(animal_type: str, phase: str, ingredients: List[Dict[str, f
 def simple_ruminant_ration(animal_type: str, body_weight: float, population: int, forage_ratio: float = 70.0) -> str:
     bw = float(body_weight)
     pop = int(population)
-    total_feed = bw * 0.04 * pop if animal_type == "kambing" else bw * 0.03 * pop
+    rates = {"sapi": 0.03, "kerbau": 0.025, "kambing": 0.04, "domba": 0.04}
+    total_feed = bw * rates.get(animal_type, 0.035) * pop
     forage = total_feed * forage_ratio / 100
     concentrate = total_feed - forage
     return (

@@ -10,9 +10,10 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from ugm_departments import UGM_DEPARTMENTS, HULU_HILIR_FLOW, department_coverage_check
+from commodity_breeds import catalog_rows, commodity_label
 
 APP_NAME = "AI Pakar Ternak"
-STORAGE_VERSION = "1.2"
+STORAGE_VERSION = "1.3"
 
 HEADER_FILL = "166534"
 SUBHEADER_FILL = "DCFCE7"
@@ -22,7 +23,8 @@ BORDER_COLOR = "CBD5E1"
 
 PROFILE_LABELS = {
     "farm_name": "Nama Farm / Kelompok",
-    "animal_type": "Jenis Ternak",
+    "animal_type": "Komoditas Ternak",
+    "breed": "Bangsa / Ras / Strain",
     "production_goal": "Tujuan Usaha",
     "phase": "Fase Ternak",
     "population": "Populasi (ekor)",
@@ -249,7 +251,8 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
         ("Session ID", payload.get("session_id", "")),
         ("Terakhir Disimpan", payload.get("last_saved_at", payload.get("exported_at", ""))),
         ("Nama Farm", profile.get("farm_name", "")),
-        ("Jenis Ternak", profile.get("animal_type", "")),
+        ("Komoditas Ternak", commodity_label(profile.get("animal_type", ""))),
+        ("Bangsa/Ras/Strain", profile.get("breed", "")),
         ("Tujuan Usaha", profile.get("production_goal", "")),
         ("Fase", profile.get("phase", "")),
         ("Populasi", profile.get("population", "")),
@@ -291,6 +294,21 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
         ws.cell(idx, 3, key)
     _style_cells(ws, 5, ws.max_row, 3)
     _set_widths(ws, {"A": 30, "B": 60, "C": 28})
+
+    # Katalog Komoditas & Bangsa
+    ws = _sheet_title(wb, "Komoditas_Bangsa")
+    _style_title(ws, "Katalog Komoditas Ternak dan Bangsa/Ras/Strain", "Daftar referensi komoditas yang digunakan AI untuk membaca karakter produksi, pakan, reproduksi, dan pasar.")
+    headers = ["Komoditas", "Key", "Kelompok", "Bangsa/Ras/Strain", "Fokus", "Catatan"]
+    header_row = 4
+    for col, header in enumerate(headers, start=1):
+        ws.cell(header_row, col, header)
+    _style_table(ws, header_row, len(headers))
+    for r_idx, row in enumerate(catalog_rows(), start=header_row + 1):
+        for c_idx, header in enumerate(headers, start=1):
+            ws.cell(r_idx, c_idx, row.get(header, ""))
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(headers))
+    _set_widths(ws, {"A": 18, "B": 18, "C": 24, "D": 28, "E": 20, "F": 70})
+    _auto_filter(ws, header_row, len(headers))
 
     # Catatan Performa
     ws = _sheet_title(wb, "Catatan_Performa")

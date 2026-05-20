@@ -89,7 +89,7 @@ def health_prompt_context(case: Dict[str, object]) -> str:
     return (
         "Kasus kesehatan ternak. Berikan triase, kemungkinan penyebab, tindakan awal aman, isolasi/biosecurity, pencegahan, dan kapan harus memanggil dokter hewan. "
         "Jangan memberikan dosis obat keras/antibiotik spesifik tanpa pemeriksaan.\n"
-        f"Jenis ternak: {case.get('animal_type', '-')}; populasi: {case.get('population', '-')}; terdampak: {case.get('affected', '-')}; "
+        f"Jenis ternak: {case.get('animal_type', '-')}; bangsa/strain: {case.get('breed', '-')}; populasi: {case.get('population', '-')}; terdampak: {case.get('affected', '-')}; "
         f"umur/fase: {case.get('phase', '-')}; gejala: {case.get('symptoms', '-')}; durasi: {case.get('duration', '-')}; "
         f"pakan/air: {case.get('feed_water', '-')}; kandang/kolam: {case.get('housing', '-')}; kematian: {case.get('mortality', '-')}."
     )

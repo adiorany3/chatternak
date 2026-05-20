@@ -82,9 +82,9 @@ UNHELPFUL_PATTERNS = (
 )
 
 DOMAIN_TERMS = (
-    "ternak", "peternakan", "sapi", "kambing", "domba", "ayam", "bebek", "itik", "ikan", "kelinci",
+    "ternak", "peternakan", "sapi", "kerbau", "kambing", "domba", "ayam", "bebek", "itik", "puyuh", "kelinci", "babi", "ikan", "lele", "nila", "gurame", "patin", "ikan mas",
     "pakan", "kandang", "kolam", "vaksin", "penyakit", "reproduksi", "bunting", "birahi",
-    "inseminasi", "pupuk", "kompos", "biogas", "bep", "modal", "produksi", "ransum", "hijauan",
+    "inseminasi", "pupuk", "kompos", "biogas", "bep", "modal", "produksi", "ransum", "hijauan", "bangsa", "ras", "strain", "bibit", "genetik",
 )
 
 

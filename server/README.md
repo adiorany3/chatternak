@@ -7,7 +7,7 @@ Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 ## Fitur Utama
 
 ### Chat dan AI
-- Persona kuat sebagai **AI Pakar Ternak** dengan format jawaban pakar, aturan kesehatan, dan template komoditas.
+- Persona kuat sebagai **AI Pakar Ternak** dengan format jawaban pakar, aturan kesehatan, template komoditas, dan katalog bangsa/ras/strain ternak.
 - Integrasi API OpenAI-compatible via `https://api.slashai.my.id/v1/chat/completions`.
 - API key aman lewat **Streamlit Secrets**, bukan `config.toml`.
 - Default model murah, dengan fallback model otomatis.
@@ -20,6 +20,12 @@ Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
   - **Peternak Rakyat**: bahasa sederhana dan bertahap.
   - **Industri Modern**: KPI, SOP, audit trail, FCR, ADG, mortalitas, biaya, dan risiko operasional.
 
+
+### Komoditas Ternak dan Bangsa/Ras/Strain
+- Profil farm sekarang menyimpan **komoditas ternak** dan **bangsa/ras/strain**.
+- Katalog mencakup sapi, kerbau, kambing, domba, ayam, bebek/itik, puyuh, kelinci, babi, lele, nila, gurame, patin, dan ikan mas.
+- Contoh bangsa/strain: Sapi Bali, Madura, PO, Brahman Cross, Simmental, Limousin, FH; Kambing Kacang, PE, Boer, Saanen, Sapera; Domba Garut, Ekor Tipis, Dorper; Broiler, Layer, KUB, Joper; Itik Mojosari, Alabio, Peking; Lele Sangkuriang, Nila Nirwana, Gurame Soang, Patin Siam, dan lainnya.
+- Informasi bangsa/strain ikut dikirim ke AI, ditulis ke XLSX, dan muncul dalam laporan PDF.
 
 ### Kerangka Hulu-Hilir 5 Departemen
 - Sistem sekarang memakai kerangka 5 departemen Fakultas Peternakan UGM sebagai peta keilmuan:
@@ -55,6 +61,7 @@ Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 - Sheet yang tersedia antara lain:
   - Ringkasan
   - Profil
+  - Komoditas_Bangsa
   - Catatan_Performa
   - Kalender
   - Chat
@@ -103,6 +110,7 @@ openai_integration.py
 chat_router.py
 persona.py
 domain_data.py
+commodity_breeds.py
 calculators.py
 farm_profile.py
 farm_records.py

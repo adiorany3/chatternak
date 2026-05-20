@@ -106,8 +106,9 @@ def detect_tool_response(message: str) -> str | None:
     """Menjawab pola hitung eksplisit tanpa biaya API."""
     text = message.lower().strip()
 
+    animal_pattern = "|".join(re.escape(name) for name in sorted(FEED_RATES.keys(), key=len, reverse=True))
     feed_match = re.search(
-        r"(?:hitung|berapa)\s+(?:kebutuhan|jumlah)?\s*pakan\s+(?:untuk|bagi)?\s*(\d+)\s+(?:ekor|benih|bibit)?\s*(sapi|kambing|ayam|bebek|ikan|kelinci)(?:\s+dengan\s+berat\s+(\d+(?:[\.,]\d+)?)\s*(?:kg|kilogram)?)?",
+        rf"(?:hitung|berapa)\s+(?:kebutuhan|jumlah)?\s*pakan\s+(?:untuk|bagi)?\s*(\d+)\s+(?:ekor|benih|bibit)?\s*({animal_pattern})(?:\s+dengan\s+berat\s+(\d+(?:[\.,]\d+)?)\s*(?:kg|kilogram)?)?",
         text,
     )
     if feed_match:

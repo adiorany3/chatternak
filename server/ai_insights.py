@@ -89,6 +89,7 @@ def build_scorecard(profile: Dict[str, Any], records: List[Dict[str, Any]], cale
         "records_count": summary["count"],
         "population": p["population"],
         "animal_type": p["animal_type"],
+        "breed": p.get("breed", ""),
         "phase": p["phase"],
         "adg": summary.get("adg"),
         "fcr": summary.get("fcr"),
@@ -145,7 +146,7 @@ def local_operational_insights(profile: Dict[str, Any], records: List[Dict[str, 
                 "evidence": f"ADG estimasi {summary['adg']:.3f} kg/hari.",
                 "action": "Evaluasi kualitas pakan, kecukupan air, kepadatan kandang, parasit/penyakit, stres panas, dan kualitas bibit.",
             })
-        elif summary["adg"] < 0.05 and p["animal_type"] in {"sapi", "kambing", "domba"}:
+        elif summary["adg"] < 0.05 and p["animal_type"] in RUMINANTS:
             insights.append({
                 "priority": "SEDANG",
                 "area": "Pertumbuhan",

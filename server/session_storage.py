@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from ugm_departments import UGM_DEPARTMENTS, HULU_HILIR_FLOW, department_coverage_check
 
 APP_NAME = "AI Pakar Ternak"
 STORAGE_VERSION = "1.2"
@@ -435,6 +436,40 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
     _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(DECISION_LOG_HEADERS))
     _set_widths(ws, {"A": 20, "B": 42, "C": 54, "D": 16, "E": 16, "F": 12, "G": 14, "H": 22, "I": 24, "J": 36})
     _auto_filter(ws, header_row, len(DECISION_LOG_HEADERS))
+
+
+    # Kerangka 5 Departemen Fapet UGM
+    ws = _sheet_title(wb, "Kerangka_5_Departemen")
+    _style_title(ws, "Kerangka Hulu-Hilir 5 Departemen", "Peta ini membantu peternak membaca usaha dari pakan, produksi, ekonomi, teknologi hasil, hingga reproduksi/pemuliaan.")
+    header_row = 4
+    headers = ["Departemen", "Peran Hulu-Hilir", "Cakupan Utama", "Output Aplikasi", "Status Data", "Perlu Dilengkapi"]
+    for col, header in enumerate(headers, start=1):
+        ws.cell(header_row, col, header)
+    _style_table(ws, header_row, len(headers))
+    coverage = department_coverage_check(profile, records, calendar, health, {"formula_selected": formula_selected, "decision_log": app_state.get("decision_log", []) if isinstance(app_state, dict) else []})
+    coverage_map = {item["Departemen"]: item for item in coverage}
+    for r_idx, dept in enumerate(UGM_DEPARTMENTS, start=header_row + 1):
+        cov = coverage_map.get(dept["name"], {})
+        ws.cell(r_idx, 1, dept["name"])
+        ws.cell(r_idx, 2, dept["hulu_hilir_role"])
+        ws.cell(r_idx, 3, "; ".join(dept.get("scope", [])))
+        ws.cell(r_idx, 4, "; ".join(dept.get("outputs", [])))
+        ws.cell(r_idx, 5, cov.get("Status Data", ""))
+        ws.cell(r_idx, 6, cov.get("Perlu Dilengkapi", ""))
+    start_flow = header_row + len(UGM_DEPARTMENTS) + 3
+    ws.cell(start_flow, 1, "Alur Hulu-Hilir")
+    ws.cell(start_flow, 1).font = Font(bold=True, color="166534")
+    ws.cell(start_flow + 1, 1, "Tahap")
+    ws.cell(start_flow + 1, 2, "Departemen")
+    ws.cell(start_flow + 1, 3, "Fungsi")
+    _style_table(ws, start_flow + 1, 3)
+    for offset, (stage, dept, desc) in enumerate(HULU_HILIR_FLOW, start=start_flow + 2):
+        ws.cell(offset, 1, stage)
+        ws.cell(offset, 2, dept)
+        ws.cell(offset, 3, desc)
+    _style_cells(ws, header_row + 1, max(ws.max_row, header_row + 1), len(headers))
+    _set_widths(ws, {"A": 32, "B": 42, "C": 70, "D": 42, "E": 20, "F": 56})
+    _auto_filter(ws, header_row, len(headers))
 
     # Pemakaian AI
     ws = _sheet_title(wb, "Pemakaian_AI")

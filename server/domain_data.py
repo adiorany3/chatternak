@@ -108,4 +108,6 @@ DOMAIN_TERMS = {
     "pakan", "hijauan", "konsentrat", "ransum", "dedak", "silase", "fermentasi", "kandang", "kolam", "bioflok",
     "vaksin", "penyakit", "diare", "cacing", "scabies", "mastitis", "reproduksi", "bunting", "birahi", "ib", "inseminasi",
     "produksi", "telur", "susu", "daging", "bobot", "panen", "pupuk", "kompos", "biogas", "bep", "modal", "usaha",
+    "nutrisi", "makanan ternak", "sosial ekonomi", "agribisnis", "teknologi hasil", "hasil ternak",
+    "pemuliaan", "genetik", "bibit", "karkas", "pascapanen", "mutu", "olahan",
 }

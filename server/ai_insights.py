@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Tuple
 from farm_profile import normalise_profile, profile_completeness, summarize_profile
 from farm_records import performance_flags, records_context, summarize_records
 from farm_calendar import calendar_context
+from ugm_departments import department_context, report_section_markdown
 
 
 PRIORITY_ORDER = {"KRITIS": 0, "TINGGI": 1, "SEDANG": 2, "RENDAH": 3}
@@ -274,13 +275,15 @@ def build_ai_insight_context(profile: Dict[str, Any], records: List[Dict[str, An
         "Catatan performa:\n" + records_context(records),
         "Kalender manajemen:\n" + calendar_context(calendar_events),
         health_text,
+        department_context(),
+        report_section_markdown(profile, records, calendar_events, health_case or {}, {}),
         "Insight lokal awal:\n" + format_insights_markdown(insights),
-        "Instruksi output: buat insight manajemen peternakan berbasis data yang tersedia. Jangan mengarang data. Pisahkan antara fakta, asumsi, risiko, dan rekomendasi. Beri prioritas tindakan 24 jam, 7 hari, dan 30 hari. Sertakan indikator yang perlu dipantau.",
+        "Instruksi output: buat insight manajemen peternakan berbasis data yang tersedia. Jangan mengarang data. Pisahkan antara fakta, asumsi, risiko, dan rekomendasi. Beri prioritas tindakan 24 jam, 7 hari, dan 30 hari. Sertakan indikator yang perlu dipantau. Gunakan lensa 5 departemen Fakultas Peternakan UGM untuk memastikan keputusan mencakup pakan, produksi, reproduksi/genetik, sosial-ekonomi, dan teknologi hasil ternak bila relevan.",
     ])
 
 
 def insight_prompt() -> str:
     return (
         "Buatkan insight manajemen farm dari data aplikasi. Fokus pada keputusan praktis: risiko utama, anomali performa, pakan, kesehatan, kalender, biaya, dan tindakan prioritas. "
-        "Gunakan format: 1) Kesimpulan eksekutif, 2) Temuan data, 3) Risiko prioritas, 4) Rekomendasi 24 jam, 5) Rekomendasi 7 hari, 6) Rekomendasi 30 hari, 7) Data yang masih perlu dicatat."
+        "Gunakan format: 1) Kesimpulan eksekutif, 2) Peta 5 departemen/hulu-hilir, 3) Temuan data, 4) Risiko prioritas, 5) Rekomendasi 24 jam, 6) Rekomendasi 7 hari, 7) Rekomendasi 30 hari, 8) Data yang masih perlu dicatat."
     )

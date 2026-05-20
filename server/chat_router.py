@@ -13,6 +13,7 @@ from model_catalog import estimate_cost_rp
 from farm_profile import make_profile_context
 from farm_records import records_context
 from farm_calendar import calendar_context
+from ugm_departments import department_context, department_prompt_for_text
 
 
 def is_domain_related(message: str) -> bool:
@@ -75,6 +76,8 @@ def build_messages(
     messages: List[Dict[str, str]] = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "system", "content": SHORT_CONTEXT},
+        {"role": "system", "content": department_context()},
+        {"role": "system", "content": department_prompt_for_text(user_message)},
     ]
     if profile:
         messages.append({"role": "system", "content": make_profile_context(profile)})

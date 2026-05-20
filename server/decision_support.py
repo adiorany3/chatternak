@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
 from domain_data import FEED_RATES, DEFAULT_WEIGHTS
+from ugm_departments import UGM_DEPARTMENTS
 from farm_profile import profile_completeness, normalise_profile
 from farm_records import summarize_records
 from health_triage import triage_level
@@ -65,6 +66,17 @@ LOCAL_LIBRARY: Dict[str, Dict[str, str]] = {
         "catatan": "Silase baik berbau asam segar, bukan busuk; hindari jamur dan adaptasikan bertahap.",
     },
 }
+# Kerangka akademik hulu-hilir peternakan. Dipakai agar aplikasi tidak hanya menjawab budidaya,
+# tetapi juga mencakup nutrisi, produksi, sosial-ekonomi, teknologi hasil, serta reproduksi/pemuliaan.
+for _dept in UGM_DEPARTMENTS:
+    LOCAL_LIBRARY.setdefault(
+        _dept["short_name"].lower(),
+        {
+            "kategori": "Kerangka 5 Departemen",
+            "ringkas": f"{_dept['name']} mencakup {_dept['hulu_hilir_role']}",
+            "catatan": "Cakupan: " + "; ".join(_dept.get("scope", [])[:3]),
+        },
+    )
 
 EDUCATION_MODULES: Dict[str, List[Dict[str, str]]] = {
     "Dasar Beternak": [
@@ -82,6 +94,10 @@ EDUCATION_MODULES: Dict[str, List[Dict[str, str]]] = {
     "Manajemen Industri": [
         {"judul": "Kelola berbasis KPI", "materi": "Farm modern perlu memantau ADG, FCR, mortalitas, produksi telur/susu, biaya pakan/kg gain, dan kepatuhan SOP.", "kuis": "Apa hubungan FCR dengan biaya produksi?"},
         {"judul": "Audit trail", "materi": "Keputusan pakan, vaksin, obat, panen, dan mortalitas harus punya tanggal, pelaksana, alasan, dan hasil evaluasi.", "kuis": "Mengapa audit trail penting di farm industri?"},
+    ],
+    "Kerangka 5 Departemen": [
+        {"judul": "Hulu sampai hilir", "materi": "Peternakan tidak hanya budidaya. Keputusan harus membaca pakan, produksi, reproduksi/genetik, ekonomi usaha, serta mutu dan pengolahan hasil ternak.", "kuis": "Sebutkan lima bagian besar yang perlu diperhatikan dalam usaha peternakan."},
+        {"judul": "Teknologi hasil ternak", "materi": "Setelah ternak dipanen, mutu daging, susu, telur, ikan, atau pupuk tetap harus dijaga melalui sortasi, kebersihan, penyimpanan, dan pengolahan yang aman.", "kuis": "Mengapa pascapanen penting dalam usaha peternakan?"},
     ],
 }
 

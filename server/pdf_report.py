@@ -5,6 +5,7 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict, Iterable, List, Tuple
 from xml.sax.saxutils import escape
+from ugm_departments import UGM_DEPARTMENTS, HULU_HILIR_FLOW, department_coverage_check
 
 APP_NAME = "AI Pakar Ternak"
 DEVELOPER = "Developed by Galuh Adi Insani"
@@ -161,6 +162,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     readiness = context.get("readiness", {}) or {}
     risk = context.get("risk", {}) or app_state.get("last_risk_score", {}) or {}
     local_insights = context.get("local_insights", []) or []
+    department_coverage = context.get("department_coverage") or department_coverage_check(profile, records, calendar, health, {"decision_log": decision_log})
     records_summary = _records_summary(records)
 
     buffer = BytesIO()
@@ -306,7 +308,28 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     profile_table = [["Kolom", "Isi"]] + [[label, _make_paragraph(value, styles["Body"])] for label, value in _profile_rows(profile)]
     story.append(_make_table(profile_table, [5.0 * cm, 11.0 * cm]))
 
-    story.append(_make_paragraph("3. KPI dan Recording Performa", styles["SectionTitle"]))
+
+    story.append(_make_paragraph("3. Kerangka 5 Departemen Hulu-Hilir", styles["SectionTitle"]))
+    story.append(_make_paragraph(
+        "Bagian ini memastikan laporan tidak berhenti pada budidaya, tetapi juga membaca nutrisi-pakan, produksi, sosial-ekonomi, teknologi hasil, serta pemuliaan-reproduksi.",
+        styles["Body"],
+    ))
+    dept_data = [["Departemen", "Peran", "Status Data", "Perlu Dilengkapi"]]
+    coverage_map = {item.get("Departemen"): item for item in department_coverage if isinstance(item, dict)}
+    for dept in UGM_DEPARTMENTS:
+        cov = coverage_map.get(dept["name"], {})
+        dept_data.append([
+            _make_paragraph(dept["name"], styles["Small"]),
+            _make_paragraph(dept["hulu_hilir_role"], styles["Small"]),
+            _text(cov.get("Status Data")),
+            _make_paragraph(cov.get("Perlu Dilengkapi", "-"), styles["Small"]),
+        ])
+    story.append(_make_table(dept_data, [3.6 * cm, 5.0 * cm, 2.4 * cm, 5.0 * cm]))
+    flow_data = [["Tahap", "Departemen", "Fungsi"]] + [[stage, dept, _make_paragraph(desc, styles["Small"])] for stage, dept, desc in HULU_HILIR_FLOW]
+    story.append(_make_paragraph("Alur hulu-hilir", styles["Body"]))
+    story.append(_make_table(flow_data, [3.0 * cm, 4.6 * cm, 8.4 * cm]))
+
+    story.append(_make_paragraph("4. KPI dan Recording Performa", styles["SectionTitle"]))
     metric_rows = [["Metrik", "Nilai"]]
     metrics = benchmark.get("metrics", {}) or {}
     metric_rows.extend([
@@ -341,7 +364,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     else:
         story.append(_make_paragraph("Belum ada catatan performa. Mulai catat bobot, pakan, biaya, mortalitas, telur/susu, dan catatan harian.", styles["Body"]))
 
-    story.append(_make_paragraph("4. Kesehatan, Biosecurity, dan Agenda", styles["SectionTitle"]))
+    story.append(_make_paragraph("5. Kesehatan, Biosecurity, dan Agenda", styles["SectionTitle"]))
     bio = readiness.get("biosecurity", {}) or {}
     health_rows = [
         ["Aspek", "Ringkasan"],
@@ -364,7 +387,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
         story.append(_make_paragraph("Agenda Manajemen", styles["SectionTitle"]))
         story.append(_make_table(agenda_data, [2.7 * cm, 5.2 * cm, 2.4 * cm, 5.7 * cm]))
 
-    story.append(_make_paragraph("5. Insight AI dan Log Keputusan", styles["SectionTitle"]))
+    story.append(_make_paragraph("6. Insight AI dan Log Keputusan", styles["SectionTitle"]))
     ai_content = insight.get("content") if isinstance(insight, dict) else ""
     if ai_content:
         excerpt = str(ai_content).strip()
@@ -391,7 +414,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
     else:
         story.append(_make_paragraph("Belum ada log keputusan AI. Setiap insight/konsultasi penting akan tersimpan agar dapat dievaluasi kembali.", styles["Body"]))
 
-    story.append(_make_paragraph("6. Catatan Penutup", styles["SectionTitle"]))
+    story.append(_make_paragraph("7. Catatan Penutup", styles["SectionTitle"]))
     story.append(_make_paragraph(
         "Laporan ini disusun dari data yang diinput pengguna. Akurasi rekomendasi bergantung pada kelengkapan data lapangan. Untuk kasus darurat, kematian mendadak, demam tinggi, sesak napas, diare berdarah, kembung berat, atau penurunan produksi drastis, segera hubungi dokter hewan/paramedik setempat.",
         styles["Body"],

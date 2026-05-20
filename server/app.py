@@ -61,6 +61,15 @@ from openai_integration import DEFAULT_CONFIG, OpenAIChatAPI
 from session_storage import build_session_payload, export_session_xlsx, import_session_xlsx, session_filename
 from pdf_report import generate_pdf_report, pdf_report_filename
 from ui_theme import apply_accessible_theme
+from ugm_departments import (
+    UGM_DEPARTMENTS,
+    HULU_HILIR_FLOW,
+    department_coverage_check,
+    department_markdown,
+    hulu_hilir_markdown,
+    department_prompt_for_text,
+    report_section_markdown,
+)
 from expert_rules import (
     build_expert_context,
     decision_card_from_answer,
@@ -323,6 +332,7 @@ def build_pdf_report_context() -> Dict[str, Any]:
         "readiness": readiness_score(profile, records, calendar_events, st.session_state.biosecurity_checked),
         "risk": farm_risk_score(profile, records, calendar_events, health_case, st.session_state.biosecurity_checked),
         "local_insights": local_operational_insights(profile, records, calendar_events, health_case),
+        "department_coverage": department_coverage_check(profile, records, calendar_events, health_case, {"formula_selected": st.session_state.formula_selected, "decision_log": st.session_state.decision_log}),
     }
 
 
@@ -770,6 +780,113 @@ def render_decision_log() -> None:
         st.session_state.confirm_clear_log_nonce += 1
         st.session_state.reset_notice = "Log keputusan berhasil dikosongkan. Data lama dapat dipulihkan dari backup XLSX yang sudah diunduh."
         safe_rerun()
+
+
+def render_department_framework() -> None:
+    st.subheader("Kerangka Hulu–Hilir 5 Departemen")
+    st.caption("Kerangka ini memastikan AI Pakar Ternak tidak hanya menjawab budidaya, tetapi juga pakan, produksi, reproduksi/genetik, sosial-ekonomi, dan teknologi hasil ternak.")
+    cols = st.columns(5)
+    for col, dept in zip(cols, UGM_DEPARTMENTS):
+        with col:
+            st.markdown(
+                f"""
+                <div class="ptn-step-card">
+                    <div class="ptn-card-title">{dept['short_name']}</div>
+                    <div class="ptn-card-body">{dept['hulu_hilir_role']}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    with st.expander("Lihat detail cakupan setiap departemen", expanded=False):
+        st.markdown(department_markdown())
+    st.markdown("**Alur hulu–hilir:**")
+    st.markdown(hulu_hilir_markdown())
+
+
+def render_department_coverage_panel() -> None:
+    profile = normalise_profile(st.session_state.farm_profile)
+    app_state = {
+        "formula_selected": st.session_state.get("formula_selected", []),
+        "decision_log": st.session_state.get("decision_log", []),
+    }
+    coverage = department_coverage_check(
+        profile,
+        st.session_state.farm_records,
+        st.session_state.farm_calendar_events,
+        st.session_state.last_health_case,
+        app_state,
+    )
+    st.subheader("Cek Cakupan Data 5 Departemen")
+    st.caption("Gunakan tabel ini untuk melihat bagian hulu–hilir mana yang sudah kuat dan mana yang perlu dilengkapi.")
+    st.dataframe(coverage, width="stretch", hide_index=True)
+
+
+def render_department_consultation(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.subheader("Konsultasi Berbasis 5 Departemen")
+    st.caption("Pilih lensa keilmuan agar jawaban AI lebih fokus dan mencakup hulu–hilir peternakan.")
+    dept_options = [dept["name"] for dept in UGM_DEPARTMENTS]
+    dept_name = st.selectbox("Lensa departemen", dept_options, key="department_consultation_lens")
+    selected_dept = next((dept for dept in UGM_DEPARTMENTS if dept["name"] == dept_name), UGM_DEPARTMENTS[0])
+    st.info(selected_dept["hulu_hilir_role"])
+    with st.expander("Pertanyaan kritis menurut lensa ini", expanded=True):
+        for q in selected_dept.get("questions", []):
+            st.markdown(f"- {q}")
+    prompt = st.text_area(
+        "Pertanyaan / kasus",
+        placeholder="Contoh: Saya punya 20 kambing penggemukan, pakan utama rumput odot dan ampas tahu. Bagaimana evaluasi pakan, biaya, dan target panennya?",
+        height=120,
+        key="department_consultation_prompt",
+    )
+    if st.button("Konsultasikan dengan lensa departemen", width="stretch", disabled=not prompt.strip()):
+        extra_context = "\n".join([
+            f"Gunakan lensa utama: {selected_dept['name']}.",
+            f"Peran hulu-hilir: {selected_dept['hulu_hilir_role']}",
+            "Cakupan departemen: " + "; ".join(selected_dept.get("scope", [])),
+            "Pertanyaan kritis: " + "; ".join(selected_dept.get("questions", [])),
+            department_prompt_for_text(prompt),
+        ])
+        response, meta = run_ai_consultation(
+            prompt,
+            selected_model_id,
+            selected_fallback_models,
+            selected_temperature,
+            max_history_messages,
+            prefer_ai,
+            extra_context=extra_context,
+        )
+        st.session_state.last_ai_response = response
+        append_decision_log(f"Konsultasi 5 Departemen - {selected_dept['short_name']}", response, meta)
+        st.markdown(response)
+        render_decision_card_from_last()
+        render_ai_trace(meta)
+
+
+def render_technology_results_center(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
+    st.subheader("Teknologi Hasil Ternak")
+    st.caption("Modul hilir untuk penanganan daging, susu, telur, ikan, pupuk/limbah, mutu, penyimpanan, pengolahan, dan nilai tambah.")
+    product_type = st.selectbox("Produk utama", ["Daging/karkas", "Susu", "Telur", "Ikan konsumsi", "Pupuk/kompos/limbah", "Olahan lain"], key="hasil_product_type")
+    condition = st.text_area("Kondisi saat ini", placeholder="Contoh: telur mudah retak, susu dijual segar, daging dipotong pagi dijual siang, kompos masih bau.", height=90, key="hasil_condition")
+    target = st.text_input("Target perbaikan", placeholder="Contoh: masa simpan lebih lama, produk lebih higienis, nilai jual naik", key="hasil_target")
+    checklist = [
+        "Alat dan wadah produk dibersihkan sebelum/sesudah dipakai",
+        "Produk disortir/grading sebelum dijual",
+        "Ada tempat penyimpanan bersih dan terlindung matahari/hujan",
+        "Air yang digunakan bersih",
+        "Produk sakit/mati mendadak tidak dijual untuk konsumsi",
+        "Ada catatan tanggal panen/produksi dan jumlah produk",
+    ]
+    checked = st.multiselect("Checklist hilir yang sudah dilakukan", checklist, key="hasil_checklist")
+    if st.button("Buat SOP dan Insight Hilir", width="stretch"):
+        prompt = f"Buat SOP dan insight teknologi hasil ternak untuk produk {product_type}. Kondisi: {condition}. Target: {target}. Checklist terpenuhi: {', '.join(checked) if checked else '-'}"
+        extra_context = "Gunakan lensa Teknologi Hasil Ternak: higienitas, mutu produk, sortasi, penyimpanan, pengolahan, nilai tambah, dan risiko kontaminasi. Berikan langkah untuk peternak rakyat dan catatan tambahan untuk industri modern."
+        response, meta = run_ai_consultation(
+            prompt, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai, extra_context=extra_context
+        )
+        st.session_state.last_ai_response = response
+        append_decision_log("Teknologi Hasil Ternak", response, meta)
+        st.markdown(response)
+        render_decision_card_from_last()
+        render_ai_trace(meta)
 
 
 def render_dashboard() -> None:
@@ -1557,6 +1674,13 @@ def render_management_report() -> None:
     profile = normalise_profile(st.session_state.farm_profile)
     benchmark = benchmark_kpi(profile, st.session_state.farm_records)
     ready = readiness_score(profile, st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.biosecurity_checked)
+    dept_report = report_section_markdown(
+        profile,
+        st.session_state.farm_records,
+        st.session_state.farm_calendar_events,
+        st.session_state.last_health_case,
+        {"formula_selected": st.session_state.get("formula_selected", []), "decision_log": st.session_state.get("decision_log", [])},
+    )
     report = f"""
 # Laporan Manajemen AI Pakar Ternak
 
@@ -1585,6 +1709,8 @@ Tanggal: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 ## Agenda Manajemen
 - Jumlah jadwal tersimpan: {len(st.session_state.farm_calendar_events)}
 - Jumlah catatan performa: {len(st.session_state.farm_records)}
+
+{dept_report}
 
 ## Rekomendasi Singkat
 1. Lengkapi profil dan recording jika masih kosong.
@@ -1646,6 +1772,8 @@ def render_workflow_overview() -> None:
 def render_simple_home() -> None:
     render_dashboard()
     st.divider()
+    render_department_framework()
+    st.divider()
     render_workflow_overview()
 
 
@@ -1670,9 +1798,11 @@ def render_consultation_center(
 ) -> None:
     st.header("Konsultasi AI")
     st.caption("Gunakan konsultasi bertahap untuk peternak pemula. Gunakan chat pakar untuk pertanyaan bebas. Gunakan triase untuk kasus kesehatan.")
-    tab_guided, tab_chat, tab_health = st.tabs(["Konsultasi Bertahap", "Chat Pakar", "Triase Kesehatan"])
+    tab_guided, tab_dept, tab_chat, tab_health = st.tabs(["Konsultasi Bertahap", "5 Departemen", "Chat Pakar", "Triase Kesehatan"])
     with tab_guided:
         render_guided_consultation(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    with tab_dept:
+        render_department_consultation(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
     with tab_chat:
         render_chat(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
     with tab_health:
@@ -1688,12 +1818,13 @@ def render_decision_center(
 ) -> None:
     st.header("Insight & Keputusan")
     st.caption("Bagian ini dipakai setelah data farm terisi. Fokusnya adalah rekomendasi tindakan, efisiensi pakan, KPI, SOP, dan prediksi usaha.")
-    tab_insight, tab_feed, tab_kpi, tab_prediction, tab_sop, tab_log = st.tabs([
+    tab_insight, tab_feed, tab_kpi, tab_prediction, tab_sop, tab_hasil, tab_log = st.tabs([
         "AI Insight",
         "Formulasi Pakan",
         "Benchmark KPI",
         "Prediksi Usaha",
         "SOP & Biosecurity",
+        "Teknologi Hasil",
         "Log Keputusan",
     ])
     with tab_insight:
@@ -1706,6 +1837,8 @@ def render_decision_center(
         render_business_prediction(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
     with tab_sop:
         render_sop_biosecurity(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
+    with tab_hasil:
+        render_technology_results_center(selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
     with tab_log:
         render_decision_log()
 
@@ -1725,9 +1858,12 @@ def render_tools_center() -> None:
 def render_learning_report_center() -> None:
     st.header("Edukasi & Laporan")
     st.caption("Bagian ini untuk membaca pengetahuan lokal, belajar bertahap, dan menyiapkan laporan yang dapat dibagikan.")
-    tab_library, tab_education, tab_report, tab_persona = st.tabs(["Library Lokal", "Edukasi", "Laporan", "Aturan Pakar"])
+    tab_library, tab_framework, tab_education, tab_report, tab_persona = st.tabs(["Library Lokal", "5 Departemen", "Edukasi", "Laporan", "Aturan Pakar"])
     with tab_library:
         render_local_library()
+    with tab_framework:
+        render_department_framework()
+        render_department_coverage_panel()
     with tab_education:
         render_education()
     with tab_report:
@@ -1760,7 +1896,7 @@ prefer_ai = True
 max_history_messages = max_history_messages_default
 
 st.title("🐄 AI Pakar Ternak")
-st.caption("Asisten keputusan peternakan: isi data, konsultasi, baca insight, lalu simpan backup XLSX.")
+st.caption("Asisten keputusan peternakan hulu–hilir: nutrisi, produksi, sosial-ekonomi, teknologi hasil, pemuliaan-reproduksi, insight, dan backup data.")
 
 with st.sidebar:
     st.header("Menu Utama")

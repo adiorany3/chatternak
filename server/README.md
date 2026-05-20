@@ -1,6 +1,6 @@
 # AI Pakar Ternak
 
-Aplikasi Streamlit berbasis AI untuk membantu peternak rakyat dan pengelola farm modern dalam konsultasi peternakan, pakan, kesehatan, reproduksi, recording performa, SOP, biosecurity, prediksi usaha, insight AI, dan backup data XLSX.
+Aplikasi Streamlit berbasis AI untuk membantu peternak rakyat dan pengelola farm modern dalam konsultasi peternakan dari hulu sampai hilir: nutrisi-pakan, produksi, sosial-ekonomi/agribisnis, teknologi hasil ternak, pemuliaan-reproduksi, kesehatan, recording performa, SOP, biosecurity, prediksi usaha, insight AI, backup XLSX, dan laporan PDF.
 
 Footer aplikasi: **Developed by Galuh Adi Insani**.
 
@@ -19,6 +19,18 @@ Footer aplikasi: **Developed by Galuh Adi Insani**.
 - Mode pengguna:
   - **Peternak Rakyat**: bahasa sederhana dan bertahap.
   - **Industri Modern**: KPI, SOP, audit trail, FCR, ADG, mortalitas, biaya, dan risiko operasional.
+
+
+### Kerangka Hulu-Hilir 5 Departemen
+- Sistem sekarang memakai kerangka 5 departemen Fakultas Peternakan UGM sebagai peta keilmuan:
+  - Nutrisi dan Makanan Ternak
+  - Produksi Ternak
+  - Sosial Ekonomi Peternakan
+  - Teknologi Hasil Ternak
+  - Pemuliaan dan Reproduksi Ternak
+- Tersedia tab **5 Departemen** pada menu Konsultasi AI untuk konsultasi berdasarkan lensa keilmuan tertentu.
+- Tersedia modul **Teknologi Hasil** untuk daging, susu, telur, ikan konsumsi, pupuk/kompos/limbah, olahan, mutu, penyimpanan, dan nilai tambah.
+- Dashboard dan laporan menampilkan cek cakupan data 5 departemen agar terlihat bagian hulu-hilir mana yang masih kurang.
 
 ### Manajemen Farm
 - Dashboard Farm.
@@ -54,6 +66,7 @@ Footer aplikasi: **Developed by Galuh Adi Insani**.
   - Prediksi_Usaha
   - Pemakaian_AI
   - Log_Keputusan_AI
+  - Kerangka_5_Departemen
   - RAW_JSON tersembunyi untuk restore data
 
 
@@ -63,8 +76,8 @@ Sidebar hanya memakai 6 menu utama agar tidak membingungkan:
 
 1. **Beranda** — ringkasan farm, risiko, insight cepat, dan alur kerja.
 2. **Input Data** — profil farm, catatan performa, dan kalender.
-3. **Konsultasi AI** — konsultasi bertahap, chat pakar, dan triase kesehatan.
-4. **Insight & Keputusan** — AI insight, formulasi pakan, KPI, prediksi usaha, SOP, dan biosecurity.
+3. **Konsultasi AI** — konsultasi bertahap, konsultasi 5 departemen, chat pakar, dan triase kesehatan.
+4. **Insight & Keputusan** — AI insight, formulasi pakan, KPI, prediksi usaha, SOP, biosecurity, dan teknologi hasil ternak.
 5. **Alat Hitung** — kalkulator pakan, prediksi pertumbuhan, dan BEP.
 6. **Edukasi & Laporan** — library lokal, materi edukasi, dan laporan manajemen.
 
@@ -99,6 +112,7 @@ feed_formulation.py
 ai_insights.py
 decision_support.py
 expert_rules.py
+ugm_departments.py
 session_storage.py
 model_catalog.py
 models.toml
@@ -173,6 +187,7 @@ Aplikasi menyediakan laporan peternakan dalam format PDF siap cetak melalui menu
 
 - ringkasan eksekutif farm;
 - profil peternakan;
+- peta cakupan 5 departemen/hulu-hilir;
 - skor kesiapan dan risiko;
 - KPI performa seperti ADG, FCR, mortalitas, pakan, dan biaya;
 - ringkasan biosecurity dan agenda manajemen;

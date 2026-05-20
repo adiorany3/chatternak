@@ -1276,7 +1276,14 @@ def render_commodity_breed_catalog() -> None:
     st.subheader("Komoditas Ternak & Bangsa/Ras/Strain")
     st.caption("Katalog ini membantu AI membedakan rekomendasi untuk ternak potong, perah, petelur, pembibitan, dan akuakultur.")
     selected = st.selectbox("Pilih komoditas", ANIMAL_TYPES, format_func=commodity_label, key="catalog_commodity_select")
-    selected_breed = st.selectbox("Pilih bangsa/ras/strain", breed_options(selected), key="catalog_breed_select")
+    catalog_breed_list = breed_options(selected)
+    selected_breed = st.selectbox(
+        "Pilih bangsa/ras/strain",
+        catalog_breed_list,
+        index=0,
+        key=f"catalog_breed_select_{selected}",
+        help="Pilihan bangsa/ras/strain otomatis mengikuti komoditas ternak yang dipilih.",
+    )
     detail = breed_detail(selected, selected_breed)
     st.info(commodity_breed_context(selected, selected_breed))
     c1, c2 = st.columns(2)
@@ -1508,38 +1515,56 @@ def render_profile() -> None:
     st.caption("Profil ini akan dikirim sebagai konteks ke AI agar jawaban tidak generik.")
     p = normalise_profile(st.session_state.farm_profile)
 
+    saved_animal = p.get("animal_type", ANIMAL_TYPES[0])
+    if saved_animal not in ANIMAL_TYPES:
+        saved_animal = ANIMAL_TYPES[0]
+
+    animal = st.selectbox(
+        "Komoditas ternak",
+        ANIMAL_TYPES,
+        index=ANIMAL_TYPES.index(saved_animal),
+        format_func=commodity_label,
+        key="profile_animal_selector",
+        help="Setelah komoditas dipilih, pilihan bangsa/ras/strain di bawah akan otomatis menyesuaikan.",
+    )
+
     with st.form("profile_form"):
         col1, col2 = st.columns(2)
         with col1:
             farm_name = st.text_input("Nama farm / kelompok", value=p.get("farm_name", ""))
-            animal = st.selectbox(
-                "Komoditas ternak",
-                ANIMAL_TYPES,
-                index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0,
-                format_func=commodity_label,
-            )
             breed_list = breed_options(animal)
-            current_breed = p.get("breed", "") or (breed_list[0] if breed_list else "")
-            if current_breed not in breed_list:
+            current_breed = p.get("breed", "") if p.get("animal_type") == animal else ""
+            if current_breed and current_breed not in breed_list:
                 breed_list = [current_breed] + breed_list
-            breed = st.selectbox("Bangsa / ras / strain", breed_list, index=breed_list.index(current_breed) if current_breed in breed_list else 0)
+            if not current_breed:
+                current_breed = breed_list[0] if breed_list else "Lainnya/Campuran"
+            breed = st.selectbox(
+                "Bangsa / ras / strain",
+                breed_list,
+                index=breed_list.index(current_breed) if current_breed in breed_list else 0,
+                key=f"profile_breed_selector_{animal}",
+                help="Daftar ini difilter otomatis berdasarkan komoditas ternak yang dipilih.",
+            )
             st.caption(breed_detail(animal, breed).get("note", ""))
             goal_list = goal_options(animal)
-            current_goal = p.get("production_goal", "pedaging")
-            if current_goal not in goal_list:
+            current_goal = p.get("production_goal", "pedaging") if p.get("animal_type") == animal else ""
+            if current_goal and current_goal not in goal_list:
                 goal_list = [current_goal] + goal_list
+            if not current_goal:
+                current_goal = goal_list[0] if goal_list else "pedaging"
             goal = st.selectbox(
                 "Tujuan pemeliharaan",
                 goal_list,
                 index=goal_list.index(current_goal) if current_goal in goal_list else 0,
                 format_func=goal_label,
+                key=f"profile_goal_selector_{animal}",
             )
             st.caption(goal_context(goal, animal))
             phases = ANIMAL_PHASES.get(animal, [p.get("phase", "umum")])
-            current_phase = p.get("phase", phases[0])
+            current_phase = p.get("phase", phases[0]) if p.get("animal_type") == animal else (phases[0] if phases else "umum")
             if current_phase not in phases:
                 phases = [current_phase] + phases
-            phase = st.selectbox("Fase ternak", phases, index=phases.index(current_phase))
+            phase = st.selectbox("Fase ternak", phases, index=phases.index(current_phase), key=f"profile_phase_selector_{animal}")
             population = st.number_input("Populasi (ekor)", min_value=0, value=int(p.get("population", 0)), step=1)
             average_weight = st.number_input("Bobot rata-rata (kg)", min_value=0.0, value=float(p.get("average_weight_kg", 0.0)), step=0.1)
         with col2:
@@ -1618,15 +1643,34 @@ def render_health_consultation(selected_model_id: str, selected_fallback_models:
     if uploaded:
         st.info("Foto tersimpan di sesi ini sebagai catatan pendukung. Analisis visual tetap bersifat indikasi awal, bukan diagnosis final.")
 
+    saved_health_animal = p.get("animal_type", ANIMAL_TYPES[0])
+    if saved_health_animal not in ANIMAL_TYPES:
+        saved_health_animal = ANIMAL_TYPES[0]
+    animal = st.selectbox(
+        "Komoditas ternak",
+        ANIMAL_TYPES,
+        index=ANIMAL_TYPES.index(saved_health_animal),
+        key="health_animal_selector",
+        format_func=commodity_label,
+        help="Bangsa/ras/strain di formulir kesehatan otomatis mengikuti komoditas ini.",
+    )
+
     with st.form("health_form"):
         col1, col2 = st.columns(2)
         with col1:
-            animal = st.selectbox("Komoditas ternak", ANIMAL_TYPES, index=ANIMAL_TYPES.index(p["animal_type"]) if p["animal_type"] in ANIMAL_TYPES else 0, key="health_animal", format_func=commodity_label)
             health_breeds = breed_options(animal)
-            current_health_breed = p.get("breed", "") if p.get("animal_type") == animal else (health_breeds[0] if health_breeds else "")
+            current_health_breed = p.get("breed", "") if p.get("animal_type") == animal else ""
             if current_health_breed and current_health_breed not in health_breeds:
                 health_breeds = [current_health_breed] + health_breeds
-            breed = st.selectbox("Bangsa / ras / strain", health_breeds, index=health_breeds.index(current_health_breed) if current_health_breed in health_breeds else 0, key="health_breed")
+            if not current_health_breed:
+                current_health_breed = health_breeds[0] if health_breeds else "Lainnya/Campuran"
+            breed = st.selectbox(
+                "Bangsa / ras / strain",
+                health_breeds,
+                index=health_breeds.index(current_health_breed) if current_health_breed in health_breeds else 0,
+                key=f"health_breed_selector_{animal}",
+                help="Daftar ini difilter otomatis berdasarkan komoditas ternak yang dipilih.",
+            )
             population = st.number_input("Populasi total", min_value=1, value=max(int(p.get("population", 1)), 1), step=1)
             affected = st.number_input("Jumlah yang sakit/terdampak", min_value=1, value=1, step=1)
             phase = st.text_input("Umur/fase", value=p.get("phase", ""))

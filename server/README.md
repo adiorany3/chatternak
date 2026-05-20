@@ -404,3 +404,7 @@ Versi ini mengurangi proses berat saat pengguna hanya berpindah dropdown/menu:
 - `st.cache_data` dipakai untuk cache generator XLSX/PDF berdasarkan fingerprint payload.
 - Autosave XLSX hanya berjalan ketika data benar-benar berubah, bukan setiap rerun yang sama.
 - Jika data berubah setelah file disiapkan, aplikasi meminta pengguna menyiapkan ulang backup agar isi file tetap terbaru.
+
+## Update dropdown komoditas dan bangsa/ras/strain
+- Pilihan **Bangsa / ras / strain** pada Profil Peternakan, Konsultasi Kesehatan, dan Katalog Komoditas otomatis mengikuti **Komoditas ternak** yang dipilih.
+- Saat komoditas diganti, pilihan bangsa/ras/strain yang tidak sesuai tidak dibawa ke komoditas baru.

@@ -1,131 +1,354 @@
-# Chatternak - Farming Chat Bot
+# AI Pakar Ternak
 
-Sebuah aplikasi chat bot interaktif yang dapat memberikan informasi tentang peternakan dan pertanian.
+Aplikasi Streamlit berbasis AI untuk membantu peternak rakyat dan pengelola farm modern dalam konsultasi peternakan dari hulu sampai hilir: nutrisi-pakan, produksi, sosial-ekonomi/agribisnis, teknologi hasil ternak, pemuliaan-reproduksi, kesehatan, recording performa, SOP, biosecurity, prediksi usaha, insight AI, backup XLSX, dan laporan PDF.
 
-## Fitur
+Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 
-- Antarmuka chat yang sederhana dan responsif
-- Basis pengetahuan tentang berbagai hewan ternak:
-  - Sapi
-  - Kambing
-  - Ayam
-  - Bebek
-  - Ikan
-- Informasi tentang pupuk organik dan pengomposan
-- Informasi umum tentang memulai usaha peternakan
-- Backend server dengan Python untuk pemrosesan pertanyaan yang lebih canggih
+## Fitur Utama
 
-## Persyaratan
+### Chat dan AI
+- Persona kuat sebagai **AI Pakar Ternak** dengan format jawaban pakar, aturan kesehatan, template komoditas, dan katalog bangsa/ras/strain ternak.
+- Integrasi API OpenAI-compatible via `https://api.slashai.my.id/v1/chat/completions`.
+- API key aman lewat **Streamlit Secrets**, bukan `config.toml`.
+- Default model murah, dengan fallback model otomatis.
+- Chat history, profil farm, catatan performa, kalender, kasus kesehatan, insight, skor risiko, dan preferensi pengguna dikirim sebagai konteks AI.
+- Validator jawaban AI akan meminta perbaikan otomatis jika jawaban terlalu umum, kurang tindakan, atau berisiko pada kasus kesehatan.
+- AI dapat bertanya balik maksimal 5 pertanyaan penting jika data kasus belum cukup.
+- Tombol ubah jawaban: **Lebih sederhana**, **Langkah lapangan**, **Versi teknis**, dan **Buat SOP**.
+- Log keputusan AI tersimpan agar rekomendasi dapat ditindaklanjuti dan dievaluasi.
+- Mode pengguna:
+  - **Peternak Rakyat**: bahasa sederhana dan bertahap.
+  - **Industri Modern**: KPI, SOP, audit trail, FCR, ADG, mortalitas, biaya, dan risiko operasional.
 
-- Browser web modern (Chrome, Firefox, Safari, Edge)
-- Python 3.6 atau lebih tinggi (untuk server backend)
-- Node.js dan npm (opsional, untuk pengembangan frontend)
 
-## Instalasi
+### Komoditas Ternak dan Bangsa/Ras/Strain
+- Profil farm sekarang menyimpan **komoditas ternak** dan **bangsa/ras/strain**.
+- Katalog mencakup sapi, kerbau, kambing, domba, ayam, bebek/itik, puyuh, kelinci, babi, lele, nila, gurame, patin, dan ikan mas.
+- Contoh bangsa/strain: Sapi Bali, Madura, PO, Brahman Cross, Simmental, Limousin, FH; Kambing Kacang, PE, Boer, Saanen, Sapera; Domba Garut, Ekor Tipis, Dorper; Broiler, Layer, KUB, Joper; Itik Mojosari, Alabio, Peking; Lele Sangkuriang, Nila Nirwana, Gurame Soang, Patin Siam, dan lainnya.
+- Informasi bangsa/strain ikut dikirim ke AI, ditulis ke XLSX, dan muncul dalam laporan PDF.
 
-### Frontend
+### Tujuan Pemeliharaan
+- Profil farm sekarang menyimpan **tujuan pemeliharaan**: **pedaging**, **petelur**, **perah**, dan **dwiguna**.
+- Tujuan ini dipakai AI untuk menyesuaikan rekomendasi pakan, fase produksi, recording, teknologi hasil, target panen/produksi, dan analisis usaha.
+- Backup XLSX memiliki sheet **Tujuan_Pemeliharaan** agar peternak dapat membaca definisi/fokus tiap tujuan tanpa membuka aplikasi.
 
-1. Clone repositori ini:
-   ```
-   git clone https://github.com/yourusername/chatternak.git
-   cd chatternak
-   ```
+### Kerangka Hulu-Hilir 5 Departemen
+- Sistem sekarang memakai kerangka 5 departemen Fakultas Peternakan UGM sebagai peta keilmuan:
+  - Nutrisi dan Makanan Ternak
+  - Produksi Ternak
+  - Sosial Ekonomi Peternakan
+  - Teknologi Hasil Ternak
+  - Pemuliaan dan Reproduksi Ternak
+- Tersedia tab **5 Departemen** pada menu Konsultasi AI untuk konsultasi berdasarkan lensa keilmuan tertentu.
+- Tersedia modul **Teknologi Hasil** untuk daging, susu, telur, ikan konsumsi, pupuk/kompos/limbah, olahan, mutu, penyimpanan, dan nilai tambah.
+- Dashboard dan laporan menampilkan cek cakupan data 5 departemen agar terlihat bagian hulu-hilir mana yang masih kurang.
 
-2. Buka `index.html` di browser Anda atau gunakan server lokal.
+### Manajemen Farm
+- Dashboard Farm.
+- Profil Peternakan.
+- Konsultasi Bertahap.
+- Konsultasi Kesehatan / Triase.
+- Formulasi Pakan berbasis bahan lokal.
+- Benchmark KPI.
+- SOP & Biosecurity.
+- Prediksi Usaha, Panen, dan Stok Pakan.
+- Library Pengetahuan Lokal Indonesia.
+- Edukasi Peternak.
+- Laporan Manajemen.
+- Catatan Performa.
+- Kalender Manajemen.
+- Kalkulator Pakan, Prediksi Pertumbuhan, dan BEP.
 
-### Backend Server
+### Backup XLSX
+- Setiap sesi otomatis bisa diekspor ke `.xlsx`.
+- Peternak dapat membuka file XLSX tanpa sistem.
+- File XLSX dapat diunggah ulang untuk memulihkan sesi.
+- Sheet yang tersedia antara lain:
+  - Ringkasan
+  - Profil
+  - Tujuan_Pemeliharaan
+  - Komoditas_Bangsa
+  - Catatan_Performa
+  - Kalender
+  - Chat
+  - Kesehatan
+  - Insight_AI
+  - Pakan
+  - Pengaturan
+  - SOP_Terakhir
+  - Prediksi_Usaha
+  - Pemakaian_AI
+  - Log_Keputusan_AI
+  - Kerangka_5_Departemen
+  - RAW_JSON tersembunyi untuk restore data
 
-1. Pastikan Python 3.6+ sudah terpasang di sistem Anda
-2. Masuk ke direktori server:
-   ```
-   cd server
-   ```
-3. Instal dependensi Python:
-   ```
-   pip install -r requirements.txt
-   ```
-4. Jalankan server:
-   - Di macOS/Linux:
-     ```
-     ./start_server.sh
-     ```
-   - Di Windows:
-     ```
-     start_server.bat
-     ```
 
-## Cara Menggunakan
+## Alur Aplikasi Sederhana
 
-1. Jalankan server backend menggunakan langkah-langkah di atas
-2. Buka file `index.html` di browser Anda
-3. Ketik pertanyaan Anda tentang peternakan di kotak chat
-4. Tekan Enter atau klik tombol "Kirim" untuk mendapatkan respons
+Sidebar memakai 7 menu utama agar tetap ringkas namun mencakup level peternak rakyat sampai enterprise:
 
-## Contoh Pertanyaan
+1. **Beranda** — ringkasan farm, risiko, insight cepat, dan alur kerja.
+2. **Input Data** — profil farm, catatan performa, dan kalender.
+3. **Konsultasi AI** — konsultasi bertahap, konsultasi 5 departemen, chat pakar, dan triase kesehatan.
+4. **Insight & Keputusan** — AI insight, formulasi pakan, KPI, prediksi usaha, SOP, biosecurity, dan teknologi hasil ternak.
+5. **Manajemen Enterprise** — multi-farm, role, KPI, early warning, database, keuangan, knowledge base, dan audit trail.
+6. **Alat Hitung** — kalkulator pakan, prediksi pertumbuhan, dan BEP.
+7. **Edukasi & Laporan** — library lokal, materi edukasi, dan laporan manajemen.
 
-- "Apa saja jenis sapi yang populer di Indonesia?"
-- "Bagaimana cara merawat kambing?"
-- "Apa pakan yang baik untuk ayam?"
-- "Berapa lama masa kebuntingan sapi?"
-- "Bagaimana cara memulai peternakan untuk pemula?"
-- "Berapa modal yang dibutuhkan untuk beternak ikan?"
+Algoritma kerja utama:
 
-## Struktur Proyek
-
+```text
+Isi Profil Farm
+   ↓
+Catat Data Lapangan
+   ↓
+Konsultasi / Triase / Chat AI
+   ↓
+Baca Insight, KPI, SOP, Prediksi, dan Rekomendasi
+   ↓
+Pantau Dashboard Enterprise / Early Warning bila diperlukan
+   ↓
+Download Backup XLSX
 ```
-chatternak/
-├── index.html            # Halaman utama aplikasi
-├── package.json          # Konfigurasi dependensi Node.js
-├── README.md             # Dokumentasi proyek
-├── server/               # Komponen server backend
-│   ├── app.py            # Aplikasi server Python
-│   ├── requirements.txt  # Dependensi Python
-│   ├── start_server.bat  # Script untuk menjalankan server di Windows
-│   └── start_server.sh   # Script untuk menjalankan server di macOS/Linux
-└── src/                  # Kode sumber frontend
-    ├── chatbot.js        # Logika chatbot
-    └── styles.css        # Stylesheet aplikasi
+
+## Struktur File
+
+```text
+app.py
+openai_integration.py
+chat_router.py
+persona.py
+domain_data.py
+commodity_breeds.py
+calculators.py
+farm_profile.py
+farm_records.py
+farm_calendar.py
+health_triage.py
+feed_formulation.py
+ai_insights.py
+decision_support.py
+expert_rules.py
+ugm_departments.py
+session_storage.py
+model_catalog.py
+models.toml
+config.toml
+requirements.txt
+.streamlit/secrets.toml.example
 ```
 
-## Cara Memperluas Basis Pengetahuan
+## Setup Lokal
 
-Untuk menambahkan informasi baru atau topik baru ke dalam chat bot, Anda dapat mengedit file `src/chatbot.js` dan menambahkan data ke dalam objek `farmingKnowledge`.
-
-Contoh menambahkan topik baru:
-
-```javascript
-// Tambahkan topik baru ke farmingKnowledge
-'kelinci': {
-    'info': 'Kelinci adalah hewan ternak yang mudah dibudidayakan dengan siklus reproduksi cepat...',
-    'perawatan': 'Perawatan kelinci meliputi kandang yang bersih dan kering...',
-    'pakan': 'Kelinci memakan berbagai jenis sayuran dan rumput...',
-    'reproduksi': 'Kelinci betina dapat melahirkan 4-12 anak setiap kelahiran...'
-}
+```bash
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-Kemudian tambahkan pengecekan untuk pertanyaan spesifik tentang topik baru tersebut di fungsi `getBotResponse()`.
 
-## Pengembangan Server
+## Memory Ahli
 
-Server backend menggunakan Python dan dapat diperluas untuk:
-- Menambahkan algoritma pemahaman bahasa alami yang lebih canggih
-- Menghubungkan ke database untuk menyimpan percakapan
-- Mengintegrasikan dengan API eksternal untuk informasi tambahan
+Sistem sekarang memakai tiga lapisan memory:
 
-## Pengembangan Lebih Lanjut
+1. **Default expert memory** di kode aplikasi: selalu aktif setelah deploy/restart dan membentuk AI sebagai ahli peternakan hulu-hilir.
+2. **Streamlit Secrets memory**: memory permanen yang bisa disalin admin ke `App settings → Secrets`, cocok untuk konteks perusahaan, standar direksi, atau aturan strategis yang harus selalu ada.
+3. **Memory berkembang**: memory yang ditambahkan admin dari panel aplikasi atau dari saran data sesi. Memory ini ikut tersimpan di Backup XLSX dan akan aktif kembali saat XLSX dipulihkan.
 
-Beberapa ide untuk pengembangan lebih lanjut:
-- Menambahkan lebih banyak topik dan informasi detail
-- Mengimplementasikan algoritma NLP untuk pemahaman bahasa yang lebih baik
-- Menambahkan gambar atau diagram untuk ilustrasi
-- Mengembangkan ke aplikasi mobile
-- Integrasi dengan API cuaca untuk memberikan rekomendasi peternakan berdasarkan kondisi cuaca
-- Fitur otentikasi pengguna untuk menyimpan histori percakapan
+Contoh Secrets tambahan:
 
-## Kontribusi
+```toml
+[expert_memory]
+organization_context = "AI Pakar Ternak digunakan untuk mendukung keputusan peternakan hulu-hilir berstandar akademik dan industri."
+strategic_role = "Jawaban harus sesuai kebutuhan pimpinan/direktur utama: ringkas, berbasis risiko, KPI, biaya, prioritas, dan rencana eksekusi."
+notes = [
+  "Selalu bedakan rekomendasi untuk peternak rakyat dan industri modern.",
+  "Gunakan kerangka 5 departemen Fakultas Peternakan UGM untuk membaca masalah hulu-hilir."
+]
 
-Kontribusi selalu diterima! Silakan buat pull request atau buka issue untuk diskusi fitur baru atau perbaikan.
+[[expert_memory.items]]
+category = "Strategi Perusahaan"
+priority = "Tinggi"
+memory = "Setiap insight manajemen harus menyebut dampak biaya, risiko operasional, prioritas, dan target 7/30 hari."
+```
 
-## Lisensi
+Catatan: Streamlit Cloud tidak menyediakan database permanen otomatis untuk data yang ditulis aplikasi. Karena itu memory berkembang disimpan ke XLSX, sedangkan memory yang harus selalu hidup setelah restart sebaiknya dimasukkan ke Secrets.
 
-MIT License
+## Streamlit Online Secrets
+
+Masukkan di **App settings → Secrets**:
+
+```toml
+[openai]
+api_key = "ISI_API_KEY_ANDA"
+
+[admin]
+password = "ISI_KUNCI_ADMIN_ANDA"
+```
+
+Opsional:
+
+```toml
+[openai]
+api_key = "ISI_API_KEY_ANDA"
+model = "slashai/gpt-5-mini"
+```
+
+## Admin Mode
+
+Panel teknis/API disembunyikan dari pengguna biasa dan hanya terbuka dengan password admin dari Secrets. Admin dapat melihat status API, model, fallback, token, biaya, batas sesi, dan tes koneksi.
+
+## Catatan Penting Streamlit Online
+
+Filesystem Streamlit Online dapat hilang ketika app restart/redeploy. Karena itu backup utama adalah file XLSX yang diunduh peternak. Gunakan menu **Backup XLSX → Download Backup XLSX** setelah input data penting.
+
+## Batasan Kesehatan Hewan
+
+Aplikasi ini memberi triase dan tindakan awal aman, bukan pengganti dokter hewan. Untuk kematian mendadak, banyak ternak sakit bersamaan, sesak napas, kejang, kembung parah, diare berdarah, atau kondisi darurat lain, segera hubungi dokter hewan/paramedik setempat.
+
+
+## Tampilan Light Paksa
+
+Aplikasi dipaksa memakai tema **Light** melalui `.streamlit/config.toml`. Styling tambahan di `ui_theme.py` menjaga keterbacaan kartu, chat, metric, tombol, tab, expander, form input, sidebar, tabel, dan footer.
+
+Footer tetap: `Developed by Galuh Adi Insani (Fakultas Peternakan UGM)`.
+
+## Catatan versi hotfix TypeError
+
+Versi ini menambahkan pelindung kompatibilitas pada jalur `run_ai_consultation -> answer_message`, sehingga tombol rekomendasi AI pada Konsultasi Bertahap tidak berhenti jika ada mismatch parameter saat deployment Streamlit Cloud melakukan partial reload/cache.
+
+## Tampilan Light dan Pengamanan Hapus Data
+
+Aplikasi dipaksa memakai tema **Light** melalui `.streamlit/config.toml` dan styling `ui_theme.py` agar semua kartu, tabel, tombol, form, dan sidebar tetap mudah terbaca di Streamlit Cloud.
+
+Sebelum melakukan **Reset Chat** atau **Reset Data Farm**, aplikasi akan menanyakan:
+
+> Apakah database sudah Anda download?
+
+Tombol reset akan terkunci sampai pengguna mencentang konfirmasi bahwa Backup XLSX sudah diunduh. Ini mencegah data hilang ketika session Streamlit habis, app restart, atau data belum sempat dibackup.
+
+## Laporan PDF Profesional
+
+Aplikasi menyediakan laporan peternakan dalam format PDF siap cetak melalui menu **Edukasi & Laporan → Laporan** atau panel **Backup XLSX**. Laporan PDF memuat:
+
+- ringkasan eksekutif farm;
+- profil peternakan;
+- peta cakupan 5 departemen/hulu-hilir;
+- skor kesiapan dan risiko;
+- KPI performa seperti ADG, FCR, mortalitas, pakan, dan biaya;
+- ringkasan biosecurity dan agenda manajemen;
+- insight AI terakhir dan log keputusan;
+- footer **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
+
+PDF bersifat laporan baca/cetak. Untuk backup dan restore data, tetap gunakan file XLSX.
+
+
+
+## Hardening Streamlit Cloud
+
+Versi ini ditambahkan pengaman agar lebih stabil di Streamlit Online:
+
+- `streamlit>=1.57.0` agar parameter widget `width="stretch"` tersedia dan tidak lagi memakai `use_container_width` yang sudah deprecated.
+- Setiap menu utama dirender melalui safe wrapper, sehingga error di satu modul tidak langsung mematikan seluruh aplikasi.
+- Jika bagian tertentu error, aplikasi menampilkan tombol **Download Backup XLSX Darurat**.
+- Reset Chat, Reset Data Farm, dan Kosongkan Log Keputusan memakai nonce key agar tidak memicu error `st.session_state` setelah widget dibuat.
+- Generator XLSX dan PDF dibungkus dengan error handler.
+- Autosave menggunakan folder temp dan tidak dijadikan satu-satunya penyimpanan permanen. Backup utama tetap file XLSX yang diunduh pengguna.
+
+## Manajemen Enterprise / Platform Perusahaan
+
+Versi ini menambahkan lapisan **Manajemen Enterprise** untuk kebutuhan peternak rakyat yang berkembang, koperasi, perusahaan peternakan, hingga keputusan level direktur utama.
+
+Fitur tambahan:
+
+- **Role akses operasional**: Owner/Direktur Utama, Direktur Operasional, Manager Farm, Dokter Hewan/Konsultan, Admin Data, Petugas Kandang, dan Peternak Rakyat.
+- **Multi-farm dan multi-batch**: menyimpan daftar farm/unit, kandang/kolam, batch/siklus produksi, target panen, dan target pasar.
+- **Input harian cepat**: petugas cukup mengisi populasi, sakit, mati, pakan, bobot, biaya, telur/susu, dan catatan lapangan.
+- **Dashboard Direktur Utama**: skor enterprise, margin kasar, jumlah farm, batch, peringatan merah/kuning, dan prioritas keputusan.
+- **Early warning system**: membaca mortalitas, ADG, FCR, stok pakan, biosecurity, kasus kesehatan, dan kelengkapan recording.
+- **KPI standar per komoditas**: broiler, layer, ruminansia potong/perah, ikan, kelinci, babi, dan komoditas lain.
+- **Validasi data otomatis**: mencegah input tidak masuk akal seperti mortalitas melebihi populasi, bobot tidak realistis, atau pakan negatif.
+- **Keuangan enterprise**: transaksi pendapatan/biaya, total biaya, margin kasar, HPP per ekor/unit, HPP per kg gain, dan ROI estimasi.
+- **Knowledge Base / RAG ringan**: admin dapat menambahkan SOP, standar perusahaan, atau catatan teknis yang ikut masuk Memory Ahli dan Backup XLSX.
+- **Hilirisasi / Teknologi Hasil**: checklist mutu daging, susu, telur, dan ikan konsumsi sesuai tujuan pemeliharaan.
+- **Database permanen opsional**: mendukung local temp save, Supabase PostgreSQL via `DATABASE_URL`/host, dan Supabase REST legacy jika dikonfigurasi melalui Secrets.
+- **Template notifikasi**: pesan siap salin untuk WhatsApp/Telegram/Email berdasarkan early warning.
+- **Audit trail**: mencatat perubahan data penting, input harian, transaksi, knowledge base, dan sinkronisasi database.
+
+Menu baru di sidebar:
+
+```text
+Manajemen Enterprise
+├── Dashboard Direksi
+├── Multi-Farm
+├── Input Cepat
+├── KPI & Warning
+├── Keuangan
+├── Knowledge Base
+├── Hilirisasi
+├── Database
+├── Notifikasi
+└── Audit Trail
+```
+
+### Opsional: Supabase Database PostgreSQL
+
+Untuk Streamlit Online, jangan gunakan file `.env`. Masukkan konfigurasi database lewat **App settings → Secrets**.
+
+Aplikasi dapat membuat tabel otomatis jika user database memiliki izin `CREATE TABLE`. Jika ingin membuat manual, jalankan SQL berikut di Supabase SQL Editor:
+
+```sql
+create table if not exists ai_pakar_ternak_sessions (
+  session_id text primary key,
+  updated_at timestamptz not null default now(),
+  payload jsonb not null
+);
+```
+
+Gunakan konfigurasi Secrets berikut:
+
+```toml
+[database]
+provider = "postgres"
+host = "db.huhezxjjnypthgbafmdv.supabase.co"
+port = 5432
+database = "postgres"
+user = "postgres"
+password = "ISI_PASSWORD_DATABASE_SUPABASE"
+sslmode = "require"
+table = "ai_pakar_ternak_sessions"
+```
+
+Atau gunakan satu baris koneksi:
+
+```toml
+[database]
+provider = "postgres"
+database_url = "postgresql://postgres:ISI_PASSWORD_DATABASE_SUPABASE@db.huhezxjjnypthgbafmdv.supabase.co:5432/postgres?sslmode=require"
+table = "ai_pakar_ternak_sessions"
+```
+
+Untuk local development saja, boleh memakai `.env` berdasarkan `.env.example`:
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+Catatan keamanan:
+
+- Jangan commit `.env` atau password Supabase ke GitHub.
+- Gunakan **Streamlit Secrets** untuk deployment online.
+- Backup XLSX tetap disarankan sebelum reset/hapus data.
+
+Jika Supabase belum dikonfigurasi, aplikasi tetap berjalan memakai local temp save dan Backup XLSX.
+
+## Optimasi Responsivitas Dropdown/Menu
+
+Versi ini mengurangi proses berat saat pengguna hanya berpindah dropdown/menu:
+
+- File XLSX/PDF tidak lagi dibuat otomatis pada setiap rerun Streamlit.
+- Backup dan laporan dibuat secara lazy melalui tombol **Siapkan / Perbarui File Backup**.
+- Hasil XLSX/PDF yang sudah dibuat disimpan sementara di `st.session_state` agar tombol download tetap cepat.
+- `st.cache_data` dipakai untuk cache generator XLSX/PDF berdasarkan fingerprint payload.
+- Autosave XLSX hanya berjalan ketika data benar-benar berubah, bukan setiap rerun yang sama.
+- Jika data berubah setelah file disiapkan, aplikasi meminta pengguna menyiapkan ulang backup agar isi file tetap terbaru.

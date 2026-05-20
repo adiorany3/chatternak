@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import tempfile
@@ -497,22 +498,49 @@ def run_ai_consultation(prompt: str, selected_model_id: str, selected_fallback_m
         biosecurity_checked=st.session_state.biosecurity_checked,
         user_message=prompt,
     )
-    return answer_message(
-        message=prompt,
-        history=st.session_state.messages,
-        client=client,
-        selected_model=selected_model_id,
-        fallback_models=selected_fallback_models,
-        temperature=selected_temperature,
-        max_history_messages=max_history_messages,
-        models_catalog=model_catalog,
-        prefer_ai=prefer_ai,
-        profile=st.session_state.farm_profile,
-        records=st.session_state.farm_records,
-        calendar_events=st.session_state.farm_calendar_events,
-        extra_context=(audience_context(st.session_state.user_mode, st.session_state.explanation_level) + "\n" + expert_context + "\n" + extra_context).strip(),
-        user_mode=st.session_state.user_mode,
-    )
+    answer_kwargs = {
+        "message": prompt,
+        "history": st.session_state.messages,
+        "client": client,
+        "selected_model": selected_model_id,
+        "fallback_models": selected_fallback_models,
+        "temperature": selected_temperature,
+        "max_history_messages": max_history_messages,
+        "models_catalog": model_catalog,
+        "prefer_ai": prefer_ai,
+        "profile": st.session_state.farm_profile,
+        "records": st.session_state.farm_records,
+        "calendar_events": st.session_state.farm_calendar_events,
+        "extra_context": (audience_context(st.session_state.user_mode, st.session_state.explanation_level) + "\n" + expert_context + "\n" + extra_context).strip(),
+        "user_mode": st.session_state.user_mode,
+    }
+    try:
+        accepted = set(inspect.signature(answer_message).parameters)
+        if not any(param.kind == inspect.Parameter.VAR_KEYWORD for param in inspect.signature(answer_message).parameters.values()):
+            answer_kwargs = {key: value for key, value in answer_kwargs.items() if key in accepted}
+        return answer_message(**answer_kwargs)
+    except TypeError as error:
+        # Fallback untuk deployment lama/partial upload yang masih memakai signature answer_message versi sebelumnya.
+        safe_kwargs = {key: value for key, value in answer_kwargs.items() if key != "user_mode"}
+        try:
+            accepted = set(inspect.signature(answer_message).parameters)
+            if not any(param.kind == inspect.Parameter.VAR_KEYWORD for param in inspect.signature(answer_message).parameters.values()):
+                safe_kwargs = {key: value for key, value in safe_kwargs.items() if key in accepted}
+            return answer_message(**safe_kwargs)
+        except Exception as second_error:
+            return (
+                "Konsultasi AI belum bisa diproses karena terjadi ketidaksesuaian fungsi internal. "
+                "Silakan refresh aplikasi atau unggah ulang versi terbaru. Data sesi tetap aman di backup XLSX.\n\n"
+                f"Detail teknis ringkas: {type(error).__name__}: {error}; retry: {type(second_error).__name__}: {second_error}",
+                {"source": "internal_error", "error": str(error), "retry_error": str(second_error)},
+            )
+    except Exception as error:
+        return (
+            "Konsultasi AI belum bisa diproses karena error internal aplikasi. "
+            "Data yang sudah diinput tetap bisa disimpan melalui backup XLSX.\n\n"
+            f"Detail teknis ringkas: {type(error).__name__}: {error}",
+            {"source": "internal_error", "error": str(error)},
+        )
 
 def render_ai_trace(meta: Dict[str, Any]) -> None:
     if not (

@@ -160,3 +160,8 @@ Komponen penting yang sudah dioptimalkan:
 - form input;
 - sidebar;
 - footer `Developed by Galuh Adi Insani`.
+
+
+## Catatan versi hotfix TypeError
+
+Versi ini menambahkan pelindung kompatibilitas pada jalur `run_ai_consultation -> answer_message`, sehingga tombol rekomendasi AI pada Konsultasi Bertahap tidak berhenti jika ada mismatch parameter saat deployment Streamlit Cloud melakukan partial reload/cache.

@@ -109,6 +109,7 @@ def answer_message(
     calendar_events: List[Dict[str, Any]] | None = None,
     extra_context: str = "",
     user_mode: str = "Peternak Rakyat",
+    **_: Any,
 ) -> Tuple[str, Dict[str, Any]]:
     """Router utama chat.
 

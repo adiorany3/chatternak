@@ -1253,7 +1253,7 @@ def render_risk_score_panel() -> None:
 def render_expert_persona_reference() -> None:
     st.header("Persona & Aturan Pakar")
     st.caption("Bagian ini menjelaskan standar berpikir AI agar jawaban terasa seperti ahli peternakan, bukan chatbot umum.")
-    render_commodity_breed_catalog()
+    render_commodity_breed_catalog(key_prefix="persona_reference_catalog")
     st.subheader("Template komoditas")
     animal = st.selectbox("Pilih komoditas", list(COMMODITY_TEMPLATES.keys()))
     template = COMMODITY_TEMPLATES[animal]
@@ -1321,16 +1321,22 @@ def render_department_framework() -> None:
 
 
 
-def render_commodity_breed_catalog() -> None:
+def render_commodity_breed_catalog(key_prefix: str = "catalog") -> None:
     st.subheader("Komoditas Ternak & Bangsa/Ras/Strain")
     st.caption("Katalog ini membantu AI membedakan rekomendasi untuk ternak potong, perah, petelur, pembibitan, dan akuakultur.")
-    selected = st.selectbox("Pilih komoditas", ANIMAL_TYPES, format_func=commodity_label, key="catalog_commodity_select")
+    safe_prefix = re.sub(r"[^a-zA-Z0-9_]+", "_", str(key_prefix or "catalog"))
+    selected = st.selectbox(
+        "Pilih komoditas",
+        ANIMAL_TYPES,
+        format_func=commodity_label,
+        key=f"{safe_prefix}_commodity_select",
+    )
     catalog_breed_list = breed_options(selected)
     selected_breed = st.selectbox(
         "Pilih bangsa/ras/strain",
         catalog_breed_list,
         index=0,
-        key=f"catalog_breed_select_{selected}",
+        key=f"{safe_prefix}_breed_select_{selected}",
         help="Pilihan bangsa/ras/strain otomatis mengikuti komoditas ternak yang dipilih.",
     )
     detail = breed_detail(selected, selected_breed)
@@ -3032,18 +3038,18 @@ def render_learning_report_center() -> None:
     st.caption("Bagian ini untuk membaca pengetahuan lokal, belajar bertahap, dan menyiapkan laporan yang dapat dibagikan.")
     tab_library, tab_breeds, tab_framework, tab_education, tab_report, tab_persona = st.tabs(["Library Lokal", "Komoditas & Bangsa", "5 Departemen", "Edukasi", "Laporan", "Aturan Pakar"])
     with tab_library:
-        render_local_library()
+        safe_render("Library Lokal", render_local_library)
     with tab_breeds:
-        render_commodity_breed_catalog()
+        safe_render("Komoditas & Bangsa", render_commodity_breed_catalog, "learning_catalog")
     with tab_framework:
-        render_department_framework()
-        render_department_coverage_panel()
+        safe_render("Kerangka 5 Departemen", render_department_framework)
+        safe_render("Cakupan 5 Departemen", render_department_coverage_panel)
     with tab_education:
-        render_education()
+        safe_render("Edukasi Peternak", render_education)
     with tab_report:
-        render_management_report()
+        safe_render("Laporan Manajemen", render_management_report)
     with tab_persona:
-        render_expert_persona_reference()
+        safe_render("Aturan Pakar", render_expert_persona_reference)
 
 
 def render_footer() -> None:

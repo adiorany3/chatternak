@@ -57,6 +57,7 @@ from decision_support import (
 from model_catalog import format_model_option, format_rupiah, get_model_by_id, load_model_catalog
 from openai_integration import DEFAULT_CONFIG, OpenAIChatAPI
 from session_storage import build_session_payload, export_session_xlsx, import_session_xlsx, session_filename
+from ui_theme import apply_accessible_theme
 from expert_rules import (
     build_expert_context,
     decision_card_from_answer,
@@ -75,6 +76,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+apply_accessible_theme()
 
 client = OpenAIChatAPI()
 model_catalog = load_model_catalog()
@@ -1498,11 +1501,11 @@ def render_workflow_overview() -> None:
         with col:
             st.markdown(
                 f"""
-                <div style="border:1px solid #e5e7eb; border-radius:14px; padding:14px; min-height:178px; background:#ffffff;">
-                    <div style="font-size:22px; font-weight:700;">{item['step']}</div>
-                    <div style="font-weight:700; margin-top:6px;">{item['title']}</div>
-                    <div style="font-size:13px; color:#4b5563; margin-top:8px;">{item['description']}</div>
-                    <div style="font-size:12px; color:#6b7280; margin-top:10px;">Menu: {item['menu']}</div>
+                <div class="ptn-step-card">
+                    <div class="ptn-step-number">{item['step']}</div>
+                    <div class="ptn-card-title">{item['title']}</div>
+                    <div class="ptn-card-body">{item['description']}</div>
+                    <div class="ptn-card-meta">Menu: {item['menu']}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1605,7 +1608,7 @@ def render_learning_report_center() -> None:
 def render_footer() -> None:
     st.markdown("---")
     st.markdown(
-        "<div style='text-align:center; color: #6b7280; font-size: 0.9rem;'>Developed by Galuh Adi Insani</div>",
+        "<div class='ptn-footer-card'>Developed by Galuh Adi Insani</div>",
         unsafe_allow_html=True,
     )
 

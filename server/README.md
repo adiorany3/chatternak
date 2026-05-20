@@ -145,3 +145,18 @@ Filesystem Streamlit Online dapat hilang ketika app restart/redeploy. Karena itu
 ## Batasan Kesehatan Hewan
 
 Aplikasi ini memberi triase dan tindakan awal aman, bukan pengganti dokter hewan. Untuk kematian mendadak, banyak ternak sakit bersamaan, sesak napas, kejang, kembung parah, diare berdarah, atau kondisi darurat lain, segera hubungi dokter hewan/paramedik setempat.
+
+
+## Tampilan Light/Dark
+
+Aplikasi memakai `ui_theme.py` untuk menjaga keterbacaan pada tema Light maupun Dark Streamlit. Styling menggunakan variabel tema bawaan Streamlit (`--background-color`, `--secondary-background-color`, `--text-color`, dan `--primary-color`) sehingga kartu, tab, tombol, chat, metric, input, sidebar, dan footer mengikuti tema yang dipilih pengguna.
+
+Komponen penting yang sudah dioptimalkan:
+- kartu alur kerja;
+- chat message;
+- metric/scorecard;
+- tombol dan download button;
+- tab dan expander;
+- form input;
+- sidebar;
+- footer `Developed by Galuh Adi Insani`.

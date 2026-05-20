@@ -179,3 +179,22 @@ Jawaban kesehatan hewan bersifat edukatif dan triase awal. Untuk gejala berat, k
 ---
 
 Developed by Galuh Adi Insani
+
+## Backup Sesi dalam Format XLSX
+
+Aplikasi ini menyimpan snapshot sesi aktif ke file `.xlsx` secara otomatis pada folder sementara server Streamlit. Karena filesystem Streamlit Online dapat hilang ketika aplikasi restart, redeploy, atau sesi cloud berakhir, peternak tetap harus menekan **Download Backup XLSX** secara berkala dari sidebar.
+
+File backup XLSX berisi sheet berikut:
+
+- `Ringkasan` — ringkasan farm, sesi, catatan, jadwal, chat, dan pemakaian AI.
+- `Profil` — profil peternakan yang dipakai sebagai konteks AI.
+- `Catatan_Performa` — recording performa plus kolom analisis offline seperti ADG dan FCR estimasi.
+- `Kalender` — jadwal manajemen farm.
+- `Chat` — riwayat percakapan.
+- `Kesehatan` — kasus kesehatan terakhir.
+- `Insight_AI` — insight AI terakhir.
+- `Pakan` — bahan pakan terpilih.
+- `Pemakaian_AI` — pemakaian token dan estimasi biaya.
+- `RAW_JSON` — sheet tersembunyi untuk restore data secara akurat.
+
+Untuk melanjutkan sesi, buka sidebar **Backup XLSX → Pulihkan sesi dari XLSX**, unggah file backup, lalu klik **Pulihkan Data**.

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
+import uuid
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -37,8 +39,10 @@ from feed_formulation import LOCAL_FEED_INGREDIENTS, formula_feedback, simple_ru
 from health_triage import health_prompt_context, local_triage_summary, triage_level
 from model_catalog import format_model_option, format_rupiah, get_model_by_id, load_model_catalog
 from openai_integration import DEFAULT_CONFIG, OpenAIChatAPI
+from session_storage import build_session_payload, export_session_xlsx, import_session_xlsx, session_filename
 
 PROJECT_DIR = Path(__file__).resolve().parent
+SESSION_BACKUP_DIR = Path(tempfile.gettempdir()) / "pakar_ternak_nusantara_sessions"
 
 st.set_page_config(
     page_title="Pakar Ternak Nusantara",
@@ -78,6 +82,10 @@ APP_MODES = [
 
 def init_state() -> None:
     defaults: Dict[str, Any] = {
+        "session_id": uuid.uuid4().hex[:12],
+        "last_autosave_path": "",
+        "last_autosave_at": "",
+        "last_autosave_error": "",
         "messages": [],
         "last_meta": {},
         "session_request_count": 0,
@@ -141,25 +149,69 @@ def usage_limit_reached() -> bool:
     )
 
 
-def export_app_json() -> str:
-    payload = {
-        "app": "Pakar Ternak Nusantara",
-        "exported_at": datetime.now().isoformat(timespec="seconds"),
-        "profile": normalise_profile(st.session_state.farm_profile),
-        "messages": st.session_state.messages,
-        "records": st.session_state.farm_records,
-        "calendar_events": st.session_state.farm_calendar_events,
-        "last_health_case": st.session_state.last_health_case,
-        "last_ai_insight": st.session_state.last_ai_insight,
-        "usage": {
-            "requests": st.session_state.session_request_count,
-            "prompt_tokens": st.session_state.session_prompt_tokens,
-            "completion_tokens": st.session_state.session_completion_tokens,
-            "total_tokens": st.session_state.session_total_tokens,
-            "estimated_cost_rp": round(st.session_state.session_estimated_cost_rp, 6),
-        },
+def current_usage_payload() -> Dict[str, Any]:
+    return {
+        "requests": st.session_state.session_request_count,
+        "prompt_tokens": st.session_state.session_prompt_tokens,
+        "completion_tokens": st.session_state.session_completion_tokens,
+        "total_tokens": st.session_state.session_total_tokens,
+        "estimated_cost_rp": round(st.session_state.session_estimated_cost_rp, 6),
     }
+
+
+def build_current_session_payload() -> Dict[str, Any]:
+    return build_session_payload(
+        session_id=st.session_state.session_id,
+        profile=normalise_profile(st.session_state.farm_profile),
+        messages=st.session_state.messages,
+        records=st.session_state.farm_records,
+        calendar_events=st.session_state.farm_calendar_events,
+        last_health_case=st.session_state.last_health_case,
+        last_ai_insight=st.session_state.last_ai_insight,
+        formula_selected=st.session_state.formula_selected,
+        usage=current_usage_payload(),
+    )
+
+
+def export_app_json() -> str:
+    payload = build_current_session_payload()
     return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def get_session_xlsx_bytes() -> bytes:
+    return export_session_xlsx(build_current_session_payload())
+
+
+def autosave_session_xlsx() -> None:
+    try:
+        payload = build_current_session_payload()
+        filename = session_filename(payload)
+        path = SESSION_BACKUP_DIR / filename
+        export_session_xlsx(payload, path)
+        st.session_state.last_autosave_path = str(path)
+        st.session_state.last_autosave_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        st.session_state.last_autosave_error = ""
+    except Exception as error:
+        st.session_state.last_autosave_error = str(error)
+
+
+def restore_session_from_payload(payload: Dict[str, Any]) -> None:
+    profile = payload.get("profile", {}) or {}
+    usage = payload.get("usage", {}) or {}
+    st.session_state.session_id = str(payload.get("session_id") or uuid.uuid4().hex[:12])
+    st.session_state.farm_profile = normalise_profile(profile)
+    st.session_state.messages = list(payload.get("messages", []) or [])
+    st.session_state.farm_records = list(payload.get("records", []) or [])
+    st.session_state.farm_calendar_events = list(payload.get("calendar_events", []) or [])
+    st.session_state.last_health_case = dict(payload.get("last_health_case", {}) or {})
+    st.session_state.last_ai_insight = dict(payload.get("last_ai_insight", {}) or {})
+    st.session_state.formula_selected = list(payload.get("formula_selected", []) or [])
+    st.session_state.session_request_count = int(float(usage.get("requests", 0) or 0))
+    st.session_state.session_prompt_tokens = int(float(usage.get("prompt_tokens", 0) or 0))
+    st.session_state.session_completion_tokens = int(float(usage.get("completion_tokens", 0) or 0))
+    st.session_state.session_total_tokens = int(float(usage.get("total_tokens", 0) or 0))
+    st.session_state.session_estimated_cost_rp = float(usage.get("estimated_cost_rp", 0.0) or 0.0)
+    st.session_state.last_meta = {}
 
 
 def safe_dict(value: Any) -> Dict[str, Any]:
@@ -909,6 +961,39 @@ with st.sidebar:
     st.progress(profile_completeness(p) / 100)
 
     st.divider()
+    st.header("Backup XLSX")
+    st.caption("Data sesi otomatis disimpan ke XLSX sementara dan dapat diunduh agar tetap bisa dibaca tanpa aplikasi.")
+    try:
+        xlsx_payload = build_current_session_payload()
+        st.download_button(
+            "Download Backup XLSX",
+            data=export_session_xlsx(xlsx_payload),
+            file_name=session_filename(xlsx_payload),
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    except Exception as error:
+        st.error(f"Gagal membuat backup XLSX: {error}")
+
+    with st.expander("Pulihkan sesi dari XLSX"):
+        restore_file = st.file_uploader("Upload file backup XLSX", type=["xlsx"], key="restore_xlsx_file")
+        if st.button("Pulihkan Data", use_container_width=True, disabled=restore_file is None):
+            try:
+                restored = import_session_xlsx(restore_file)
+                restore_session_from_payload(restored)
+                autosave_session_xlsx()
+                st.success("Data berhasil dipulihkan dari XLSX.")
+                st.rerun()
+            except Exception as error:
+                st.error(f"Gagal memulihkan XLSX: {error}")
+
+    if st.session_state.last_autosave_at:
+        st.caption(f"Autosave terakhir: {st.session_state.last_autosave_at}")
+    if st.session_state.last_autosave_error:
+        st.warning(f"Autosave gagal: {st.session_state.last_autosave_error}")
+    st.caption("Catatan: file server Streamlit Online bisa hilang saat app restart/redeploy. Backup utama adalah file XLSX yang diunduh peternak.")
+
+    st.divider()
     st.header("Data & Percakapan")
     col_a, col_b = st.columns(2)
     with col_a:
@@ -917,7 +1002,7 @@ with st.sidebar:
             st.rerun()
     with col_b:
         st.download_button(
-            "Ekspor",
+            "JSON",
             data=export_app_json(),
             file_name="pakar-ternak-nusantara-data.json",
             mime="application/json",
@@ -959,4 +1044,5 @@ elif tool_option == "Prediksi Pertumbuhan":
 elif tool_option == "Analisis BEP":
     render_bep()
 
+autosave_session_xlsx()
 render_footer()

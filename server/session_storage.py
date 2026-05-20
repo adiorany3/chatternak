@@ -10,7 +10,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-APP_NAME = "Pakar Ternak Nusantara"
+APP_NAME = "AI Pakar Ternak"
 STORAGE_VERSION = "1.2"
 
 HEADER_FILL = "166534"
@@ -239,7 +239,7 @@ def export_session_xlsx(payload: Dict[str, Any], output_path: str | Path | None 
     ws = _sheet_title(wb, "Ringkasan")
     _style_title(
         ws,
-        "Pakar Ternak Nusantara - Backup XLSX",
+        "AI Pakar Ternak - Backup XLSX",
         "File ini dibuat otomatis agar data farm tetap dapat dibaca, disimpan, dan diunggah kembali meskipun sesi Streamlit Online berakhir.",
     )
     summary_rows = [

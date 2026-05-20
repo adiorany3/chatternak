@@ -9,7 +9,7 @@ from farm_records import summarize_records
 from health_triage import triage_level
 
 EXPERT_RESPONSE_FORMAT = """
-Format wajib jawaban Pakar Ternak Nusantara:
+Format wajib jawaban AI Pakar Ternak:
 1. Kesimpulan awal / keputusan utama.
 2. Data yang diketahui dan asumsi jika data kurang.
 3. Analisis penyebab atau peluang perbaikan.
@@ -292,7 +292,7 @@ def validate_ai_answer(answer: str, user_message: str, user_mode: str) -> Tuple[
 
 def repair_prompt(user_message: str, answer: str, issues: List[str], user_mode: str) -> str:
     return (
-        "Perbaiki jawaban sebelumnya agar sesuai standar Pakar Ternak Nusantara.\n"
+        "Perbaiki jawaban sebelumnya agar sesuai standar AI Pakar Ternak.\n"
         f"Pertanyaan pengguna: {user_message}\n"
         f"Mode pengguna: {user_mode}\n"
         "Masalah validasi: " + "; ".join(issues) + "\n"

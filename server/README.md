@@ -1,4 +1,4 @@
-# Pakar Ternak Nusantara
+# AI Pakar Ternak
 
 Aplikasi Streamlit berbasis AI untuk membantu peternak rakyat dan pengelola farm modern dalam konsultasi peternakan, pakan, kesehatan, reproduksi, recording performa, SOP, biosecurity, prediksi usaha, insight AI, dan backup data XLSX.
 
@@ -7,7 +7,7 @@ Footer aplikasi: **Developed by Galuh Adi Insani**.
 ## Fitur Utama
 
 ### Chat dan AI
-- Persona kuat sebagai **Pakar Ternak Nusantara** dengan format jawaban pakar, aturan kesehatan, dan template komoditas.
+- Persona kuat sebagai **AI Pakar Ternak** dengan format jawaban pakar, aturan kesehatan, dan template komoditas.
 - Integrasi API OpenAI-compatible via `https://api.slashai.my.id/v1/chat/completions`.
 - API key aman lewat **Streamlit Secrets**, bukan `config.toml`.
 - Default model murah, dengan fallback model otomatis.

@@ -72,7 +72,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 SESSION_BACKUP_DIR = Path(tempfile.gettempdir()) / "pakar_ternak_nusantara_sessions"
 
 st.set_page_config(
-    page_title="Pakar Ternak Nusantara",
+    page_title="AI Pakar Ternak",
     page_icon="🐄",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -880,7 +880,7 @@ def render_profile() -> None:
 
 def render_chat(selected_model_id: str, selected_fallback_models: List[str], selected_temperature: float, max_history_messages: int, prefer_ai: bool) -> None:
     st.header("Chat Pakar")
-    st.caption("Jawaban memakai persona Pakar Ternak Nusantara dan konteks profil farm, catatan performa, serta kalender yang tersedia.")
+    st.caption("Jawaban memakai persona AI Pakar Ternak dan konteks profil farm, catatan performa, serta kalender yang tersedia.")
 
     for item in st.session_state.messages:
         with st.chat_message(item["role"]):
@@ -895,7 +895,7 @@ def render_chat(selected_model_id: str, selected_fallback_models: List[str], sel
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Pakar Ternak Nusantara sedang menganalisis..."):
+            with st.spinner("AI Pakar Ternak sedang menganalisis..."):
                 response, meta = run_ai_consultation(prompt, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
             if meta.get("source") == "limit":
                 st.warning(response)
@@ -1484,7 +1484,7 @@ def render_management_report() -> None:
     benchmark = benchmark_kpi(profile, st.session_state.farm_records)
     ready = readiness_score(profile, st.session_state.farm_records, st.session_state.farm_calendar_events, st.session_state.biosecurity_checked)
     report = f"""
-# Laporan Manajemen Pakar Ternak Nusantara
+# Laporan Manajemen AI Pakar Ternak
 
 Tanggal: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
@@ -1659,7 +1659,7 @@ selected_temperature = float(client.temperature)
 prefer_ai = True
 max_history_messages = max_history_messages_default
 
-st.title("🐄 Pakar Ternak Nusantara")
+st.title("🐄 AI Pakar Ternak")
 st.caption("Asisten keputusan peternakan: isi data, konsultasi, baca insight, lalu simpan backup XLSX.")
 
 with st.sidebar:

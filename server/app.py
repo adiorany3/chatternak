@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
 
-from calculators import calculate_bep, calculate_feed_needs, predict_growth, rupiah
+from calculators import calculate_bep, calculate_feed_needs, predict_growth
 from chat_router import answer_message
 from domain_data import ANIMAL_TYPES, DEFAULT_WEIGHTS, FEED_RATES
 from model_catalog import format_model_option, format_rupiah, get_model_by_id, load_model_catalog
@@ -28,6 +29,15 @@ model_catalog = load_model_catalog()
 limits_config = client.config.get("limits", DEFAULT_CONFIG["limits"])
 ui_config = client.config.get("ui", DEFAULT_CONFIG["ui"])
 
+ADMIN_PLACEHOLDERS = {
+    "",
+    "ISI_KUNCI_ADMIN_ANDA",
+    "ISI_ADMIN_PASSWORD_ANDA",
+    "CHANGE_ME",
+    "YOUR_ADMIN_PASSWORD",
+    "ADMIN_PASSWORD_HERE",
+}
+
 
 def init_state() -> None:
     defaults = {
@@ -38,6 +48,8 @@ def init_state() -> None:
         "session_completion_tokens": 0,
         "session_total_tokens": 0,
         "session_estimated_cost_rp": 0.0,
+        "admin_authenticated": False,
+        "admin_login_error": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -94,6 +106,54 @@ def export_chat_json() -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def safe_dict(value: Any) -> Dict[str, Any]:
+    if not value:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if hasattr(value, "to_dict"):
+        try:
+            return dict(value.to_dict())
+        except Exception:
+            pass
+    try:
+        return dict(value)
+    except Exception:
+        return {}
+
+
+def get_admin_password() -> Tuple[str, str]:
+    """Ambil kunci admin dari environment variable atau Streamlit Secrets.
+
+    Prioritas:
+    1. ADMIN_PASSWORD / STREAMLIT_ADMIN_PASSWORD dari environment.
+    2. [admin] password / key / passcode dari Streamlit Secrets.
+    """
+    env_password = (os.getenv("ADMIN_PASSWORD") or os.getenv("STREAMLIT_ADMIN_PASSWORD") or "").strip()
+    if env_password and env_password not in ADMIN_PLACEHOLDERS:
+        return env_password, "Environment variable"
+
+    try:
+        admin_section = safe_dict(st.secrets.get("admin", {}))
+        for key in ("password", "key", "passcode"):
+            value = str(admin_section.get(key, "")).strip()
+            if value and value not in ADMIN_PLACEHOLDERS:
+                return value, "Streamlit Secrets"
+    except Exception:
+        pass
+    return "", "Belum dikonfigurasi"
+
+
+def admin_is_configured() -> bool:
+    password, _ = get_admin_password()
+    return bool(password)
+
+
+def check_admin_password(candidate: str) -> bool:
+    password, _ = get_admin_password()
+    return bool(password) and candidate == password
+
+
 def plot_growth_prediction(result: Dict[str, Any]):
     fig, ax = plt.subplots(figsize=(10, 5))
     days = list(range(len(result["weights"])))
@@ -124,12 +184,50 @@ def plot_bep(fixed_cost: float, price_per_unit: float, variable_cost_per_unit: f
     return fig
 
 
-init_state()
+def render_admin_panel(
+    model_ids: List[str],
+    default_model: str,
+    fallback_defaults: List[str],
+    max_history_messages_default: int,
+) -> Tuple[str, List[str], float, bool, int]:
+    """Render panel admin dan kembalikan konfigurasi runtime untuk chat."""
+    selected_model_id = default_model
+    selected_fallback_models = fallback_defaults
+    selected_temperature = float(client.temperature)
+    prefer_ai = True
+    max_history_messages = max_history_messages_default
 
-st.title("🐄 Pakar Ternak Nusantara")
-st.caption("Asisten AI peternakan dengan persona konsultan kandang: pakan, kesehatan, reproduksi, produksi, limbah, dan analisis usaha.")
+    st.divider()
+    st.subheader("Admin")
 
-with st.sidebar:
+    password, password_source = get_admin_password()
+    if not password:
+        st.info("Panel admin belum aktif. Tambahkan [admin] password di Streamlit Secrets.")
+        return selected_model_id, selected_fallback_models, selected_temperature, prefer_ai, max_history_messages
+
+    if not st.session_state.admin_authenticated:
+        with st.form("admin_login_form", clear_on_submit=True):
+            candidate = st.text_input("Kunci admin", type="password", placeholder="Masukkan kunci admin")
+            submitted = st.form_submit_button("Buka panel admin", use_container_width=True)
+            if submitted:
+                if check_admin_password(candidate):
+                    st.session_state.admin_authenticated = True
+                    st.session_state.admin_login_error = ""
+                    st.rerun()
+                else:
+                    st.session_state.admin_login_error = "Kunci admin salah."
+        if st.session_state.admin_login_error:
+            st.error(st.session_state.admin_login_error)
+        return selected_model_id, selected_fallback_models, selected_temperature, prefer_ai, max_history_messages
+
+    st.success("Panel admin aktif")
+    st.caption(f"Sumber kunci admin: {password_source}")
+    if st.button("Kunci kembali panel admin", use_container_width=True):
+        st.session_state.admin_authenticated = False
+        st.session_state.admin_login_error = ""
+        st.rerun()
+
+    st.divider()
     st.header("Status AI")
     if client.is_configured:
         st.success("API aktif")
@@ -138,27 +236,31 @@ with st.sidebar:
         st.caption(client.status_reason)
     st.caption(f"Sumber API key: {client.api_key_source}")
 
-    model_ids = [model["id"] for model in model_catalog]
-    default_model = client.model if client.model in model_ids else model_ids[0]
     selected_model_id = st.selectbox(
         "Model awal",
         options=model_ids,
         index=model_ids.index(default_model),
         format_func=lambda model_id: format_model_option(get_model_by_id(model_id, model_catalog)),
-        help="Setiap pertanyaan selalu mulai dari model awal ini. Jika gagal, sistem naik ke fallback lalu kembali lagi ke model awal pada pertanyaan berikutnya.",
+        help=(
+            "Setiap pertanyaan selalu mulai dari model awal ini. Jika gagal, "
+            "sistem naik ke fallback lalu kembali lagi ke model awal pada pertanyaan berikutnya."
+        ),
     )
-    fallback_defaults = [model for model in client.fallback_models if model in model_ids]
     selected_fallback_models = st.multiselect(
         "Fallback model",
         options=model_ids,
         default=fallback_defaults,
         format_func=lambda model_id: format_model_option(get_model_by_id(model_id, model_catalog)),
     )
-    st.session_state.selected_model_id = selected_model_id
-    st.session_state.selected_fallback_models = selected_fallback_models
-    st.session_state.selected_temperature = st.slider("Temperature", 0.0, 1.5, float(client.temperature), 0.05)
+    selected_temperature = st.slider("Temperature", 0.0, 1.5, float(client.temperature), 0.05)
     prefer_ai = st.toggle("Gunakan AI untuk pertanyaan peternakan", value=True)
-    max_history_messages = int(limits_config.get("max_history_messages", 16))
+    max_history_messages = st.number_input(
+        "Maksimum riwayat chat ke AI",
+        min_value=2,
+        max_value=50,
+        value=max_history_messages_default,
+        step=1,
+    )
 
     st.divider()
     st.header("Pemakaian sesi")
@@ -170,20 +272,6 @@ with st.sidebar:
         st.caption(
             f"Batas sesi: {limits_config.get('max_requests_per_session', 60)} request / "
             f"{format_rupiah(float(limits_config.get('max_estimated_cost_rp_per_session', 2500)))} estimasi biaya."
-        )
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if st.button("Reset chat", use_container_width=True):
-            reset_chat()
-            st.rerun()
-    with col_b:
-        st.download_button(
-            "Ekspor JSON",
-            data=export_chat_json(),
-            file_name="riwayat-chat-ternak.json",
-            mime="application/json",
-            use_container_width=True,
         )
 
     if st.button("Tes koneksi API", use_container_width=True):
@@ -208,8 +296,54 @@ with st.sidebar:
             st.write("Endpoint:", client.chat_completions_url)
             st.write("Urutan model:", client.build_model_chain(selected_model_id, selected_fallback_models))
 
-    st.divider()
+    return selected_model_id, selected_fallback_models, selected_temperature, prefer_ai, int(max_history_messages)
+
+
+init_state()
+
+model_ids = [model["id"] for model in model_catalog]
+default_model = client.model if client.model in model_ids else model_ids[0]
+fallback_defaults = [model for model in client.fallback_models if model in model_ids]
+if not fallback_defaults:
+    fallback_defaults = [model_id for model_id in model_ids if model_id != default_model][:3]
+max_history_messages_default = int(limits_config.get("max_history_messages", 16))
+
+selected_model_id = default_model
+selected_fallback_models = fallback_defaults
+selected_temperature = float(client.temperature)
+prefer_ai = True
+max_history_messages = max_history_messages_default
+
+st.title("🐄 Pakar Ternak Nusantara")
+st.caption("Asisten AI peternakan dengan persona konsultan kandang: pakan, kesehatan, reproduksi, produksi, limbah, dan analisis usaha.")
+
+with st.sidebar:
+    st.header("Mode Aplikasi")
     tool_option = st.selectbox("Mode", ["Chat Pakar", "Kalkulator Pakan", "Prediksi Pertumbuhan", "Analisis BEP"])
+
+    st.divider()
+    st.header("Percakapan")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("Reset", use_container_width=True):
+            reset_chat()
+            st.rerun()
+    with col_b:
+        st.download_button(
+            "Ekspor",
+            data=export_chat_json(),
+            file_name="riwayat-chat-ternak.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    (
+        selected_model_id,
+        selected_fallback_models,
+        selected_temperature,
+        prefer_ai,
+        max_history_messages,
+    ) = render_admin_panel(model_ids, default_model, fallback_defaults, max_history_messages_default)
 
 if tool_option == "Chat Pakar":
     for item in st.session_state.messages:
@@ -225,8 +359,8 @@ if tool_option == "Chat Pakar":
         with st.chat_message("assistant"):
             if usage_limit_reached():
                 response = (
-                    "Batas pemakaian sesi sudah tercapai. Tekan Reset chat untuk memulai sesi baru, "
-                    "atau naikkan batas di config.toml bagian [limits]."
+                    "Batas pemakaian sesi sudah tercapai. Tekan Reset untuk memulai sesi baru, "
+                    "atau minta admin menaikkan batas sesi."
                 )
                 meta: Dict[str, Any] = {"source": "limit"}
                 st.warning(response)
@@ -238,7 +372,7 @@ if tool_option == "Chat Pakar":
                         client=client,
                         selected_model=selected_model_id,
                         fallback_models=selected_fallback_models,
-                        temperature=st.session_state.selected_temperature,
+                        temperature=selected_temperature,
                         max_history_messages=max_history_messages,
                         models_catalog=model_catalog,
                         prefer_ai=prefer_ai,
@@ -246,7 +380,11 @@ if tool_option == "Chat Pakar":
                 st.markdown(response)
                 update_usage(meta)
 
-                if bool(ui_config.get("show_model_trace", True)) and meta.get("source") == "ai":
+                if (
+                    st.session_state.admin_authenticated
+                    and bool(ui_config.get("show_model_trace", True))
+                    and meta.get("source") == "ai"
+                ):
                     usage = meta.get("usage", {}) or {}
                     trace = " → ".join(
                         f"{attempt.get('model')}" + (" ✓" if attempt.get("useful") else " ✗")

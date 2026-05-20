@@ -54,7 +54,15 @@ def get_model_by_id(model_id: str, models: List[Dict[str, Any]]) -> Dict[str, An
 
 
 def format_rupiah(value: float | int) -> str:
-    return f"Rp {float(value):,.0f}".replace(",", ".")
+    amount = float(value)
+    if amount == 0:
+        return "Rp 0"
+    if abs(amount) < 1:
+        formatted = f"{amount:,.2f}"
+    else:
+        formatted = f"{amount:,.0f}" if amount.is_integer() else f"{amount:,.2f}"
+    formatted = formatted.replace(",", "_").replace(".", ",").replace("_", ".")
+    return f"Rp {formatted}"
 
 
 def format_model_option(model: Dict[str, Any]) -> str:

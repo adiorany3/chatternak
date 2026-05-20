@@ -18,6 +18,7 @@ Persona utama aplikasi adalah **Pakar Ternak Nusantara**: konsultan peternakan p
 - Estimasi token dan biaya berdasarkan `usage` dari API.
 - Limit sederhana per sesi untuk menahan biaya.
 - Tombol reset chat dan ekspor riwayat JSON.
+- Panel teknis/API disembunyikan dalam Admin Mode dengan kunci dari Streamlit Secrets.
 - Kalkulator pakan, prediksi pertumbuhan, dan analisis BEP.
 - Struktur kode modular agar mudah dirawat.
 
@@ -49,7 +50,12 @@ Untuk lokal, buat file `.streamlit/secrets.toml`:
 ```toml
 [openai]
 api_key = "ISI_API_KEY_ANDA"
+
+[admin]
+password = "ISI_KUNCI_ADMIN_ANDA"
 ```
+
+`[admin].password` dipakai untuk membuka panel admin di sidebar. Panel ini menyimpan status API, sumber API key, pilihan model, fallback model, temperature, token, estimasi biaya, batas sesi, tes koneksi, dan debug konfigurasi. Pengguna biasa hanya melihat mode aplikasi dan tombol percakapan.
 
 ## Cara deploy Streamlit Online
 
@@ -62,9 +68,33 @@ api_key = "ISI_API_KEY_ANDA"
 ```toml
 [openai]
 api_key = "ISI_API_KEY_ANDA"
+
+[admin]
+password = "ISI_KUNCI_ADMIN_ANDA"
 ```
 
-Jangan masukkan API key ke `config.toml` atau file repository.
+Jangan masukkan API key atau kunci admin ke `config.toml` atau file repository.
+
+
+## Admin Mode
+
+Panel admin berada di sidebar dan terkunci dengan kunci dari Streamlit Secrets. Tambahkan bagian berikut di **App settings → Secrets**:
+
+```toml
+[admin]
+password = "ISI_KUNCI_ADMIN_ANDA"
+```
+
+Setelah login admin, panel akan menampilkan:
+
+- Status API dan sumber API key.
+- Pilihan model awal dan fallback model.
+- Temperature dan batas riwayat chat.
+- Pemakaian sesi, token, estimasi biaya, dan batas biaya.
+- Tombol tes koneksi API.
+- Debug konfigurasi jika `show_debug = true` di `config.toml`.
+
+Tekan **Kunci kembali panel admin** untuk menutup panel.
 
 ## Konfigurasi model
 

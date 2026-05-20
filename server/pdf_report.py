@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape
 from ugm_departments import UGM_DEPARTMENTS, HULU_HILIR_FLOW, department_coverage_check
 
 APP_NAME = "AI Pakar Ternak"
-DEVELOPER = "Developed by Galuh Adi Insani"
+DEVELOPER = "Developed by Galuh Adi Insani (Fakultas Peternakan UGM)"
 
 
 def _text(value: Any, default: str = "-") -> str:
@@ -174,7 +174,7 @@ def generate_pdf_report(payload: Dict[str, Any], context: Dict[str, Any] | None 
         topMargin=1.45 * cm,
         bottomMargin=1.45 * cm,
         title="Laporan AI Pakar Ternak",
-        author="Galuh Adi Insani",
+        author="Galuh Adi Insani (Fakultas Peternakan UGM)",
     )
 
     styles = getSampleStyleSheet()

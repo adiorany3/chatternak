@@ -2,7 +2,7 @@
 
 Aplikasi Streamlit berbasis AI untuk membantu peternak rakyat dan pengelola farm modern dalam konsultasi peternakan dari hulu sampai hilir: nutrisi-pakan, produksi, sosial-ekonomi/agribisnis, teknologi hasil ternak, pemuliaan-reproduksi, kesehatan, recording performa, SOP, biosecurity, prediksi usaha, insight AI, backup XLSX, dan laporan PDF.
 
-Footer aplikasi: **Developed by Galuh Adi Insani**.
+Footer aplikasi: **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 
 ## Fitur Utama
 
@@ -165,7 +165,7 @@ Aplikasi ini memberi triase dan tindakan awal aman, bukan pengganti dokter hewan
 
 Aplikasi dipaksa memakai tema **Light** melalui `.streamlit/config.toml`. Styling tambahan di `ui_theme.py` menjaga keterbacaan kartu, chat, metric, tombol, tab, expander, form input, sidebar, tabel, dan footer.
 
-Footer tetap: `Developed by Galuh Adi Insani`.
+Footer tetap: `Developed by Galuh Adi Insani (Fakultas Peternakan UGM)`.
 
 ## Catatan versi hotfix TypeError
 
@@ -192,7 +192,7 @@ Aplikasi menyediakan laporan peternakan dalam format PDF siap cetak melalui menu
 - KPI performa seperti ADG, FCR, mortalitas, pakan, dan biaya;
 - ringkasan biosecurity dan agenda manajemen;
 - insight AI terakhir dan log keputusan;
-- footer **Developed by Galuh Adi Insani**.
+- footer **Developed by Galuh Adi Insani (Fakultas Peternakan UGM)**.
 
 PDF bersifat laporan baca/cetak. Untuk backup dan restore data, tetap gunakan file XLSX.
 

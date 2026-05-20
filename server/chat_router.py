@@ -60,7 +60,7 @@ def get_utility_response(message: str) -> str | None:
         now = datetime.now()
         return f"Sekarang {now.strftime('%d-%m-%Y')} pukul {now.strftime('%H:%M:%S')}. Untuk manajemen ternak, gunakan tanggal ini sebagai patokan recording harian."
     if any(kw in text for kw in ("siapa pembuatmu", "siapa yang membuatmu", "siapa creator", "dibuat oleh")):
-        return "Chatbot ini dibuat oleh Galuh Adi Insani dan dikembangkan sebagai asisten peternakan berbasis AI."
+        return "Chatbot ini dikembangkan oleh Galuh Adi Insani (Fakultas Peternakan UGM) sebagai asisten peternakan berbasis AI."
     return None
 
 

@@ -1718,7 +1718,7 @@ Tanggal: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 3. Prioritaskan biosecurity, isolasi ternak sakit, dan kebersihan tempat pakan-minum.
 4. Gunakan backup XLSX setelah setiap sesi penting.
 
-Developed by Galuh Adi Insani
+Developed by Galuh Adi Insani (Fakultas Peternakan UGM)
 """.strip()
     st.markdown(report)
     report_payload = build_current_session_payload()
@@ -1875,7 +1875,7 @@ def render_learning_report_center() -> None:
 def render_footer() -> None:
     st.markdown("---")
     st.markdown(
-        "<div class='ptn-footer-card'>Developed by Galuh Adi Insani</div>",
+        "<div class='ptn-footer-card'>Developed by Galuh Adi Insani (Fakultas Peternakan UGM)</div>",
         unsafe_allow_html=True,
     )
 
@@ -2050,4 +2050,4 @@ except Exception as error:
 try:
     render_footer()
 except Exception:
-    st.caption("Developed by Galuh Adi Insani")
+    st.caption("Developed by Galuh Adi Insani (Fakultas Peternakan UGM)")

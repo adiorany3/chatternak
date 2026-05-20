@@ -313,3 +313,14 @@ table = "ai_pakar_ternak_sessions"
 ```
 
 Jika Supabase belum dikonfigurasi, aplikasi tetap berjalan memakai local temp save dan Backup XLSX.
+
+## Optimasi Responsivitas Dropdown/Menu
+
+Versi ini mengurangi proses berat saat pengguna hanya berpindah dropdown/menu:
+
+- File XLSX/PDF tidak lagi dibuat otomatis pada setiap rerun Streamlit.
+- Backup dan laporan dibuat secara lazy melalui tombol **Siapkan / Perbarui File Backup**.
+- Hasil XLSX/PDF yang sudah dibuat disimpan sementara di `st.session_state` agar tombol download tetap cepat.
+- `st.cache_data` dipakai untuk cache generator XLSX/PDF berdasarkan fingerprint payload.
+- Autosave XLSX hanya berjalan ketika data benar-benar berubah, bukan setiap rerun yang sama.
+- Jika data berubah setelah file disiapkan, aplikasi meminta pengguna menyiapkan ulang backup agar isi file tetap terbaru.

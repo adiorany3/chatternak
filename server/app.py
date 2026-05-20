@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import inspect
 import json
 import os
@@ -229,6 +230,12 @@ def init_state() -> None:
         "confirm_reset_farm_nonce": 0,
         "confirm_clear_log_nonce": 0,
         "reset_notice": "",
+        "prepared_download_hash": "",
+        "prepared_xlsx_bytes": b"",
+        "prepared_pdf_bytes": b"",
+        "prepared_xlsx_name": "",
+        "prepared_pdf_name": "",
+        "last_autosave_hash": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -280,6 +287,50 @@ def safe_build_bytes(label: str, builder, fallback: bytes = b"") -> bytes:
         if st.session_state.get("admin_authenticated", False):
             st.warning(f"Gagal membuat {label}: {error}")
         return fallback
+
+
+def stable_json_dumps(payload: Dict[str, Any]) -> str:
+    """JSON stabil untuk cache/fingerprint; aman untuk date/datetime/bytes."""
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+
+
+def payload_fingerprint(payload: Dict[str, Any]) -> str:
+    return hashlib.sha256(stable_json_dumps(payload).encode("utf-8")).hexdigest()[:16]
+
+
+@st.cache_data(show_spinner=False, ttl=300, max_entries=12)
+def cached_xlsx_bytes(payload_json: str) -> bytes:
+    return export_session_xlsx(json.loads(payload_json))
+
+
+@st.cache_data(show_spinner=False, ttl=300, max_entries=8)
+def cached_pdf_bytes(payload_json: str, context_json: str) -> bytes:
+    return generate_pdf_report(json.loads(payload_json), json.loads(context_json))
+
+
+def prepare_download_files(include_pdf: bool = True) -> None:
+    """Siapkan file download hanya saat diminta agar pindah dropdown/menu tetap ringan."""
+    payload = build_current_session_payload()
+    payload_json = stable_json_dumps(payload)
+    current_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()[:16]
+    st.session_state.prepared_xlsx_bytes = cached_xlsx_bytes(payload_json)
+    st.session_state.prepared_xlsx_name = session_filename(payload)
+    if include_pdf:
+        context_json = stable_json_dumps(build_pdf_report_context())
+        st.session_state.prepared_pdf_bytes = cached_pdf_bytes(payload_json, context_json)
+        st.session_state.prepared_pdf_name = pdf_report_filename(payload)
+    st.session_state.prepared_download_hash = current_hash
+
+
+def clear_prepared_downloads_if_stale() -> None:
+    """Jaga supaya tombol download tidak keliru saat data berubah, tanpa membuat file ulang otomatis."""
+    try:
+        payload = build_current_session_payload()
+        current_hash = payload_fingerprint(payload)
+        if st.session_state.get("prepared_download_hash") and st.session_state.prepared_download_hash != current_hash:
+            st.session_state.prepared_download_hash = ""
+    except Exception:
+        pass
 
 def reset_chat() -> None:
     st.session_state.messages = []
@@ -368,7 +419,8 @@ def export_app_json() -> str:
 
 
 def get_session_xlsx_bytes() -> bytes:
-    return export_session_xlsx(build_current_session_payload())
+    payload = build_current_session_payload()
+    return cached_xlsx_bytes(stable_json_dumps(payload))
 
 
 def build_pdf_report_context() -> Dict[str, Any]:
@@ -390,15 +442,20 @@ def build_pdf_report_context() -> Dict[str, Any]:
 
 
 def get_session_pdf_bytes() -> bytes:
-    return generate_pdf_report(build_current_session_payload(), build_pdf_report_context())
+    payload = build_current_session_payload()
+    return cached_pdf_bytes(stable_json_dumps(payload), stable_json_dumps(build_pdf_report_context()))
 
 
 def autosave_session_xlsx() -> None:
     try:
         payload = build_current_session_payload()
+        current_hash = payload_fingerprint(payload)
+        if st.session_state.get("last_autosave_hash") == current_hash:
+            return
         filename = session_filename(payload)
         path = SESSION_BACKUP_DIR / filename
         export_session_xlsx(payload, path)
+        st.session_state.last_autosave_hash = current_hash
         st.session_state.last_autosave_path = str(path)
         st.session_state.last_autosave_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         st.session_state.last_autosave_error = ""
@@ -1934,31 +1991,41 @@ Developed by Galuh Adi Insani (Fakultas Peternakan UGM)
 """.strip()
     st.markdown(report)
     report_payload = build_current_session_payload()
-    report_context = build_pdf_report_context()
     col_pdf, col_md, col_xlsx = st.columns(3)
     with col_pdf:
         try:
-            st.download_button(
-                "Download Laporan PDF",
-                data=generate_pdf_report(report_payload, report_context),
-                file_name=pdf_report_filename(report_payload),
-                mime="application/pdf",
-                width="stretch",
-                key="report_download_pdf",
-            )
+            if st.button("Siapkan PDF", width="stretch", key="report_prepare_pdf"):
+                with st.spinner("Menyiapkan laporan PDF..."):
+                    prepare_download_files(include_pdf=True)
+                st.success("PDF siap diunduh.")
+            if st.session_state.get("prepared_download_hash") and st.session_state.get("prepared_pdf_bytes"):
+                st.download_button(
+                    "Download Laporan PDF",
+                    data=st.session_state.prepared_pdf_bytes,
+                    file_name=st.session_state.prepared_pdf_name or pdf_report_filename(report_payload),
+                    mime="application/pdf",
+                    width="stretch",
+                    key="report_download_pdf",
+                )
         except Exception as error:
             st.error(f"Gagal membuat PDF: {error}")
     with col_md:
         st.download_button("Download Laporan Markdown", data=report, file_name="laporan-manajemen-pakar-ternak.md", mime="text/markdown", width="stretch")
     with col_xlsx:
         try:
-            st.download_button(
-                "Download Backup Lengkap XLSX",
-                data=get_session_xlsx_bytes(),
-                file_name=session_filename(report_payload),
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                width="stretch",
-            )
+            if st.button("Siapkan XLSX", width="stretch", key="report_prepare_xlsx"):
+                with st.spinner("Menyiapkan backup XLSX..."):
+                    prepare_download_files(include_pdf=False)
+                st.success("XLSX siap diunduh.")
+            if st.session_state.get("prepared_download_hash") and st.session_state.get("prepared_xlsx_bytes"):
+                st.download_button(
+                    "Download Backup Lengkap XLSX",
+                    data=st.session_state.prepared_xlsx_bytes,
+                    file_name=st.session_state.prepared_xlsx_name or session_filename(report_payload),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    width="stretch",
+                    key="report_download_xlsx",
+                )
         except Exception as error:
             st.error(f"Gagal membuat XLSX: {error}")
 
@@ -2407,6 +2474,7 @@ max_history_messages = max_history_messages_default
 
 st.title("🐄 AI Pakar Ternak")
 st.caption("Asisten keputusan peternakan hulu–hilir: nutrisi, produksi, sosial-ekonomi, teknologi hasil, pemuliaan-reproduksi, insight, dan backup data.")
+clear_prepared_downloads_if_stale()
 
 with st.sidebar:
     st.header("Menu Utama")
@@ -2446,23 +2514,32 @@ with st.sidebar:
 
     with st.expander("Backup XLSX", expanded=False):
         st.caption("Unduh XLSX agar data tetap bisa dibaca tanpa aplikasi dan bisa dipulihkan lagi.")
+        st.info("Agar perpindahan dropdown/menu lebih responsif, file backup dibuat hanya saat tombol di bawah ditekan.")
         try:
-            xlsx_payload = build_current_session_payload()
-            st.download_button(
-                "Download Backup XLSX",
-                data=export_session_xlsx(xlsx_payload),
-                file_name=session_filename(xlsx_payload),
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                width="stretch",
-            )
-            st.download_button(
-                "Download Laporan PDF",
-                data=generate_pdf_report(xlsx_payload, build_pdf_report_context()),
-                file_name=pdf_report_filename(xlsx_payload),
-                mime="application/pdf",
-                width="stretch",
-                key="sidebar_download_pdf_report",
-            )
+            if st.button("Siapkan / Perbarui File Backup", width="stretch", key="prepare_sidebar_backup"):
+                with st.spinner("Menyiapkan XLSX dan PDF..."):
+                    prepare_download_files(include_pdf=True)
+                st.success("File backup siap diunduh.")
+            if st.session_state.get("prepared_download_hash") and st.session_state.get("prepared_xlsx_bytes"):
+                st.download_button(
+                    "Download Backup XLSX",
+                    data=st.session_state.prepared_xlsx_bytes,
+                    file_name=st.session_state.prepared_xlsx_name or "ai-pakar-ternak-backup.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    width="stretch",
+                    key="sidebar_download_xlsx_prepared",
+                )
+                if st.session_state.get("prepared_pdf_bytes"):
+                    st.download_button(
+                        "Download Laporan PDF",
+                        data=st.session_state.prepared_pdf_bytes,
+                        file_name=st.session_state.prepared_pdf_name or "ai-pakar-ternak-laporan.pdf",
+                        mime="application/pdf",
+                        width="stretch",
+                        key="sidebar_download_pdf_report",
+                    )
+            elif st.session_state.get("prepared_xlsx_bytes"):
+                st.warning("Data berubah setelah backup disiapkan. Klik 'Siapkan / Perbarui File Backup' agar file terbaru dibuat.")
         except Exception as error:
             st.error(f"Gagal membuat backup/laporan: {error}")
 
@@ -2489,15 +2566,21 @@ with st.sidebar:
             "Tanpa file backup, data dapat hilang ketika session Streamlit habis atau app restart."
         )
         try:
-            confirm_payload = build_current_session_payload()
-            st.download_button(
-                "Download Database XLSX Sebelum Hapus",
-                data=export_session_xlsx(confirm_payload),
-                file_name=session_filename(confirm_payload),
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                width="stretch",
-                key="download_before_delete_xlsx",
-            )
+            if st.button("Siapkan Database XLSX Sebelum Hapus", width="stretch", key="prepare_before_delete_xlsx"):
+                with st.spinner("Menyiapkan database XLSX..."):
+                    prepare_download_files(include_pdf=False)
+                st.success("Database XLSX siap diunduh. Download sebelum melakukan reset/hapus.")
+            if st.session_state.get("prepared_download_hash") and st.session_state.get("prepared_xlsx_bytes"):
+                st.download_button(
+                    "Download Database XLSX Sebelum Hapus",
+                    data=st.session_state.prepared_xlsx_bytes,
+                    file_name=st.session_state.prepared_xlsx_name or "ai-pakar-ternak-backup.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    width="stretch",
+                    key="download_before_delete_xlsx",
+                )
+            else:
+                st.caption("Klik tombol siapkan database terlebih dahulu. File tidak dibuat otomatis supaya dropdown/menu lebih cepat.")
         except Exception as error:
             st.error(f"Gagal membuat backup sebelum hapus: {error}")
 

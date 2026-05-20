@@ -136,6 +136,7 @@ st.set_page_config(
 apply_accessible_theme()
 
 client = OpenAIChatAPI()
+AI_LOADING_TEXT = "Kami siapkan pertanyaan detail untuk Anda, tunggu sebentar ...."
 model_catalog = load_model_catalog()
 limits_config = client.config.get("limits", DEFAULT_CONFIG["limits"])
 ui_config = client.config.get("ui", DEFAULT_CONFIG["ui"])
@@ -924,7 +925,7 @@ def render_answer_rewrite_tools(
     for col, style, label in actions:
         if col.button(label, key=f"rewrite_{style}", width="stretch"):
             prompt = rewrite_instruction(style, last_answer)
-            with st.spinner("Menyusun ulang jawaban..."):
+            with st.spinner(AI_LOADING_TEXT):
                 response, meta = run_ai_consultation(
                     prompt,
                     selected_model_id,
@@ -1232,7 +1233,7 @@ def render_ai_insights(selected_model_id: str, selected_fallback_models: List[st
         if usage_limit_reached():
             st.warning("Batas pemakaian sesi sudah tercapai. Reset sesi atau minta admin menaikkan batas.")
         else:
-            with st.spinner("AI sedang menyusun insight manajemen farm..."):
+            with st.spinner(AI_LOADING_TEXT):
                 response, meta = run_ai_consultation(
                     insight_prompt(),
                     selected_model_id,
@@ -1351,7 +1352,7 @@ def render_chat(selected_model_id: str, selected_fallback_models: List[str], sel
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("AI Pakar Ternak sedang menganalisis..."):
+            with st.spinner(AI_LOADING_TEXT):
                 response, meta = run_ai_consultation(prompt, selected_model_id, selected_fallback_models, selected_temperature, max_history_messages, prefer_ai)
             if meta.get("source") == "limit":
                 st.warning(response)
@@ -1422,7 +1423,7 @@ def render_health_consultation(selected_model_id: str, selected_fallback_models:
         st.markdown(local_triage_summary(animal, symptoms + " " + mortality, duration, affected, population))
 
         prompt = "Analisis kasus kesehatan ternak berikut dan berikan rekomendasi praktis sesuai format pakar."
-        with st.spinner("Meminta analisis AI pakar kesehatan ternak..."):
+        with st.spinner(AI_LOADING_TEXT):
             response, meta = run_ai_consultation(
                 prompt,
                 selected_model_id,
@@ -1759,7 +1760,7 @@ def render_guided_consultation(selected_model_id: str, selected_fallback_models:
 
         if st.button("Minta Rekomendasi AI dari Data Ini", width="stretch"):
             prompt = "Beri konsultasi bertahap sesuai data kasus. Jika data masih kurang, jawab dengan asumsi sementara dan pertanyaan lanjutan paling penting."
-            with st.spinner("AI menyusun konsultasi bertahap..."):
+            with st.spinner(AI_LOADING_TEXT):
                 response, meta = run_ai_consultation(
                     prompt,
                     selected_model_id,
@@ -1792,7 +1793,7 @@ def render_benchmark_kpi(selected_model_id: str, selected_fallback_models: List[
     if not st.session_state.farm_records:
         st.info("Tambahkan catatan performa minimal 2 tanggal agar ADG/FCR lebih bermakna.")
     if st.button("Minta Analisis AI KPI", width="stretch"):
-        with st.spinner("AI menganalisis KPI farm..."):
+        with st.spinner(AI_LOADING_TEXT):
             response, meta = run_ai_consultation(
                 "Analisis KPI farm ini dan berikan keputusan manajerial untuk peternak.",
                 selected_model_id,
@@ -1845,7 +1846,7 @@ def render_sop_biosecurity(selected_model_id: str, selected_fallback_models: Lis
             st.success("SOP tersimpan ke sesi dan backup XLSX.")
     with col_b:
         if st.button("Perbaiki SOP dengan AI", width="stretch"):
-            with st.spinner("AI menyesuaikan SOP dengan profil farm..."):
+            with st.spinner(AI_LOADING_TEXT):
                 response, meta = run_ai_consultation(
                     "Perbaiki SOP berikut agar sesuai profil farm, skala usaha, risiko, dan mode pengguna.",
                     selected_model_id,
@@ -1889,7 +1890,7 @@ def render_business_prediction(selected_model_id: str, selected_fallback_models:
         if result["feed_stock_days"] < 7:
             st.warning("Stok pakan kurang dari 7 hari. Prioritaskan pengadaan agar konsumsi tidak turun.")
         if st.button("Minta Insight AI Prediksi", width="stretch"):
-            with st.spinner("AI membuat rekomendasi dari prediksi..."):
+            with st.spinner(AI_LOADING_TEXT):
                 response, meta = run_ai_consultation(
                     "Analisis prediksi usaha, panen, dan stok pakan ini. Berikan keputusan 24 jam, 7 hari, dan 30 hari.",
                     selected_model_id,
